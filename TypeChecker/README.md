@@ -1,4 +1,43 @@
-# Type checker for Legal Logical operations
+# TypeChecker
 
+Legality checks for logical operations over typed QEC blocks.
 
-We design a type system to check whether some Logical Operations(especially transversal gate and code switching) are supported and well formed.  For example, we cannot do PPM between a Surface code logical qubit with a LP code logical qubit without code switching, but is this code switching possible in the first place? this will be decided by the type checker.
+## Syntax
+
+The checker works over:
+
+```lean
+TypedEnv          -- list of validity-carrying blocks
+Capability        -- certificate data for cross-block PPMs
+SwitchCert        -- symplectic map for code switching
+PPM.MTarget       -- logical Pauli measurement target
+```
+
+## Typechecking Rule
+
+All public judgments return `Except TypeError evidence`.  Success means the
+checker recomputed a finite GF(2)/symplectic certificate.
+
+Main judgments:
+
+- `checkTransversal`
+- `checkLogicalAutomorphism`
+- `checkSwitch`
+- `checkPPM`
+- `checkPPMProgram`
+
+## Semantics
+
+This layer is static.  It does not execute programs; it proves that a requested
+logical operation is algebraically legal for the current typed environment.
+
+## Example
+
+A PPM between two blocks is rejected unless a capability supplies a merged-code
+certificate that preserves data stabilizers and measures the requested Pauli.
+
+## Subfolders
+
+- [Core](Core/README.md): blocks, typed environments, symplectic encoding.
+- [Capability](Capability/README.md): cross-block measurement capabilities.
+- [Judgment](Judgment/README.md): Transversal, Switch, PPM, and PPMProgram checks.
