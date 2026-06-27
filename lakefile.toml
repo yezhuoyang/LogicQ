@@ -1,0 +1,31 @@
+name = "LogicQ"
+version = "0.1.0"
+defaultTargets = ["LogicQ"]
+
+# LogicQ: a verified compilation pipeline (a "quantum CompCert") from a
+# chain-complex-typed fault-tolerant language down to a physical Clifford
+# target.  See DESIGN.md.
+#
+# Most of the spec phase is Mathlib-free (front-end type system, PPM, QStab,
+# QClifford are pure Bool/List/Nat).  Mathlib enters ONLY for the analytic
+# PPR semantics (the complex-matrix denotation of `exp(i φ P)`); pinned to the
+# same version as FormalRV for later reconciliation.
+#
+# MEMORY SAFETY (inherited from FormalRV): the 8 GB per-process abort guard
+# catches runaway files (and flags any that need splitting).
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+version = "git#v4.29.1"
+
+[[lean_lib]]
+name = "LogicQ"
+# ROOT-CLEAN LAYOUT (M21): there are NO bare `.lean` files at the repo root.
+# Each top-level pipeline folder owns exactly one PUBLIC AGGREGATE `<Folder>/Basic.lean`
+# (e.g. `ChainQ/Basic.lean`); those folder-owned modules are the library roots, and
+# `LogicQ.Basic` is the full-pipeline umbrella (it imports every layer's `*.Basic`).
+# Canonical build: `lake build` (all roots) — or per-layer
+# `lake build LogicQ.Basic ChainQ.Basic TypeChecker.Basic Compiler.Basic`.
+roots = ["LogicQ.Basic", "Logical.Basic", "Physical.Basic", "ChainQ.Basic", "PPR.Basic", "PPM.Basic", "QStab.Basic", "QClifford.Basic", "TypeChecker.Basic", "Compiler.Basic"]
+moreLeanArgs = ["-M", "8000"]

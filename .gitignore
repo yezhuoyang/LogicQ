@@ -1,0 +1,12 @@
+# Lean / Lake build artifacts
+/.lake/
+/lake-packages/
+/build/
+*.olean
+*.ilean
+*.c.o
+/Library/
+
+# Scratch
+/_design.json
+/_maps.json
