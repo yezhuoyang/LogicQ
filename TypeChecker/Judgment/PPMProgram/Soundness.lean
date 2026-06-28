@@ -21,10 +21,12 @@ theorem checkPPMStmt_meas_sound (Γ : TypedEnv) (caps : List Capability) :
     intro st st' h
     simp only [checkPPMStmt] at h
     split at h
-    · exact absurd h (by simp)
+    · exact absurd h (by simp)                       -- outcome var already bound (SSA reject)
     · split at h
-      · next hP => simp only [measTargets, List.all_cons, List.all_nil, Bool.and_true, hP, ok?]
-      · exact absurd h (by simp)
+      · exact absurd h (by simp)                     -- measures a discarded qubit
+      · split at h
+        · next hP => simp only [measTargets, List.all_cons, List.all_nil, Bool.and_true, hP, ok?]
+        · exact absurd h (by simp)
   | frame q p => intro _ _ _; rfl
   | discard q => intro _ _ _; rfl
   | skip => intro _ _ _; rfl
@@ -129,10 +131,12 @@ theorem checkPPMStmt_dead_mono (Γ : TypedEnv) (caps : List Capability) (q : LQu
     intro st st' h hq
     simp only [checkPPMStmt] at h
     split at h
-    · exact absurd h (by simp)
+    · exact absurd h (by simp)                       -- outcome var already bound (SSA reject)
     · split at h
-      · next hP => cases h; exact hq
-      · exact absurd h (by simp)
+      · exact absurd h (by simp)                     -- measures a discarded qubit
+      · split at h
+        · next hP => cases h; exact hq
+        · exact absurd h (by simp)
   | frame q' p =>
     intro st st' h hq
     simp only [checkPPMStmt] at h
@@ -195,10 +199,12 @@ theorem checkPPMStmt_no_use_after_discard (Γ : TypedEnv) (caps : List Capabilit
     intro st st' h hq
     simp only [checkPPMStmt] at h
     split at h
-    · exact absurd h (by simp)
-    · next hfind =>
-      simp only [touches]
-      exact Bool.eq_false_iff.mpr (fun hc => (List.find?_eq_none.mp hfind q (List.contains_iff_mem.mp hc)) hq)
+    · exact absurd h (by simp)                       -- outcome var already bound (SSA reject)
+    · split at h
+      · exact absurd h (by simp)                     -- measures a discarded qubit
+      · next hfind =>
+        simp only [touches]
+        exact Bool.eq_false_iff.mpr (fun hc => (List.find?_eq_none.mp hfind q (List.contains_iff_mem.mp hc)) hq)
   | frame q' p =>
     intro st st' h hq
     simp only [checkPPMStmt] at h

@@ -51,6 +51,18 @@ def compileOpR (caps : List Capability) (Γ : TypedEnv) (R : PPMState)
       match checkInstr caps Γ R (.ppm (progCNOTAt c t anc r₁ r₂ r₃)) with
       | .ok (Γ', R') => .ok (.ppm (progCNOTAt c t anc r₁ r₂ r₃), Γ', R')
       | .error _     => .error (.notImplemented "CNOT: no PPM gadget (transversal CNOT deferred)")
+  | .transversalLogicalCNOT c t incidence =>
+      let spec : TransversalCNOTSpec := { control := c, target := t, incidence := incidence }
+      match checkInstr caps Γ R (.transversalCNOT spec) with
+      | .ok (Γ', R') => .ok (.transversalCNOT spec, Γ', R')
+      | .error e     => .error e
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      let spec : TransversalCNOTBatchSpec :=
+        { controlBlock := controlBlock, targetBlock := targetBlock,
+          incidence := incidence, logicalIncidence := logicalIncidence }
+      match checkInstr caps Γ R (.transversalCNOTBatch spec) with
+      | .ok (Γ', R') => .ok (.transversalCNOTBatch spec, Γ', R')
+      | .error e     => .error e
   | .tGate q =>
       -- T (π/8) lowers to a DEFERRED, TYPED magic obligation carrying its target `q`:
       -- the checker accepts `.magic` (well-typed MODULO magic) but it has NO Step
@@ -146,6 +158,23 @@ theorem compileOp_sound (caps : List Capability) (Γ : TypedEnv) (R : PPMState)
       | error e2 => simp [hc2] at h
   | cnotGate c t =>
     cases hc : checkInstr caps Γ R (.ppm (progCNOTAt c t anc r₁ r₂ r₃)) with
+    | ok p =>
+      obtain ⟨Γ₀, R₀⟩ := p
+      simp only [hc, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl, rfl⟩ := h; exact hc
+    | error e => simp [hc] at h
+  | transversalLogicalCNOT c t incidence =>
+    cases hc : checkInstr caps Γ R (.transversalCNOT { control := c, target := t, incidence := incidence }) with
+    | ok p =>
+      obtain ⟨Γ₀, R₀⟩ := p
+      simp only [hc, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl, rfl⟩ := h; exact hc
+    | error e => simp [hc] at h
+  | transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+    cases hc : checkInstr caps Γ R
+        (.transversalCNOTBatch
+          { controlBlock := controlBlock, targetBlock := targetBlock,
+            incidence := incidence, logicalIncidence := logicalIncidence }) with
     | ok p =>
       obtain ⟨Γ₀, R₀⟩ := p
       simp only [hc, Except.ok.injEq, Prod.mk.injEq] at h

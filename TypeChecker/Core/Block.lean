@@ -26,6 +26,7 @@ structure Block where
   stab : BoolMat            -- symplectic stabilizer generator rows
   lx   : BoolMat := []      -- declared logical X̄ rows  (LogicalBasis, declared-first)
   lz   : BoolMat := []      -- declared logical Z̄ rows
+  dist : Option ChainQ.CSSDistanceBounds := none
   live : Bool := true
   own  : Owned := .owned
   deriving Repr

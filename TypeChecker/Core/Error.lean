@@ -20,6 +20,7 @@ inductive TypeError
   | emptyMeasurement                        -- a PPM target with no factors (no identity/no-op form)
   | nonNativeMeasurement                    -- a PPM target with >2 factors or a duplicate logical qubit
   | unboundOutcome         (r : Nat)        -- an adaptive `ite` branches on an unmeasured classical outcome
+  | outcomeReused          (r : Nat)        -- a measurement binds a classical outcome var that is ALREADY bound (SSA violation)
   | useAfterDiscard        (blk idx : Nat)  -- a logical qubit is used after being discarded/consumed
   | notImplemented         (msg : String)   -- no legal implementation found for a logical operation
   | leak                   (b : Nat)        -- an owned block was never consumed

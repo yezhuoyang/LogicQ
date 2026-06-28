@@ -35,7 +35,12 @@ open Physical
     order: the `i`-th statement binds variable `i`. -/
 abbrev QVar := Nat
 
-/-- A dense physical Pauli string over physical qubits `0 … n-1` (e.g. `ZZI`). -/
+/-- A DENSE physical Pauli string over physical qubits `0 … n-1`, INDEXED BY LIST POSITION:
+    the `i`-th element is the Pauli on physical qubit `i` (e.g. `ZZI = Z[0]Z[1]I[2]`, and
+    `X[1]X[3]` on 4 qubits is `IXIX`, NOT `XX`).  For human-facing construction prefer the
+    explicit indexed `QStab.SparsePauli` (`[(1, X), (3, X)]`) + its checked `toDense?`
+    (`QStab/SparsePauli.lean`), which makes the physical indexing unambiguous and refuses
+    empty / identity / duplicate / out-of-range operators. -/
 abbrev PauliString := List Pauli
 
 /-- Scheduling coordinates `[r = round, s = slot]`. -/
@@ -46,12 +51,15 @@ structure Sched where
 
 /-- A QStab statement; each binds the next classical variable. -/
 inductive Stmt
-  /-- `c = Prop[r,s] P` — measure the physical Pauli product `P` (optionally
-      scheduled at round `r`, slot `s`), binding its `±1` outcome. -/
+  /-- `c = Prop[r,s] P` — MEASURE the physical Pauli product `P` (optionally scheduled at
+      round `r`, slot `s`), binding its `±1` outcome.  `.prop` is for physical Pauli
+      MEASUREMENT / syndrome extraction ONLY; physical CLIFFORD and PAULI APPLICATIONS
+      (`H`/`S`/`X`/`Z`/`CNOT`/`CZ`) are separate stabilizer instructions
+      (`QStab.StabilizerInstr`, `QStab/StabilizerProgram.lean`), NOT `.prop`. -/
   | prop   (sched : Option Sched) (P : PauliString)
   /-- `d = Parity c…` — the classical XOR of the listed earlier outcomes. -/
   | parity (srcs : List QVar)
-  deriving Repr, Inhabited
+  deriving DecidableEq, Repr, Inhabited
 
 /-- A QStab program. -/
 abbrev Prog := List Stmt

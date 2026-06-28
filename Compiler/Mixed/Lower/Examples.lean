@@ -101,6 +101,40 @@ example : ProgramOk [] ⟨⟨0, 0⟩, false⟩ tenvQ PPMState.init 0 [.blockTran
 example : LogicalOp.srcAction tenvQ (.hGate ⟨0, 0⟩)
         = LogicalOp.srcAction tenvQ (.blockTransversal 0 hGate2x2) := by decide
 
+/-! ### Transversal logical CNOT syntax. -/
+
+example : srcOpOk ttwoQ PPMState.init
+    (.transversalLogicalCNOT ⟨0, 0⟩ ⟨1, 0⟩ [[true]]) = true := by decide
+
+example : (match compileOpR [] ttwoQ PPMState.init ⟨2, 0⟩ 0 1 2
+              (.transversalLogicalCNOT ⟨0, 0⟩ ⟨1, 0⟩ [[true]]) with
+           | .ok (.transversalCNOT spec, _, _) =>
+               spec.control == ⟨0, 0⟩ && spec.target == ⟨1, 0⟩ && spec.incidence == [[true]]
+           | _ => false) = true := by decide
+
+example : (match compile? .executable { caps := [], anc := ⟨2, 0⟩ } ttwoQ
+              [.transversalLogicalCNOT ⟨0, 0⟩ ⟨1, 0⟩ [[true]]] with
+           | .ok c => ok? (checkLogicalExec [] ttwoQ c.prog)
+           | _ => false) = true := by decide
+
+example : ok? (compile? .executable { caps := [], anc := ⟨2, 0⟩ } ttwoQ
+    [.transversalLogicalCNOT ⟨0, 0⟩ ⟨1, 0⟩ [[false]]]) = false := by decide
+
+example : srcOpOk ttwoQ PPMState.init
+    (.transversalLogicalCNOTBatch 0 1 [[true]] [[true]]) = true := by decide
+
+example : (match compileOpR [] ttwoQ PPMState.init ⟨2, 0⟩ 0 1 2
+              (.transversalLogicalCNOTBatch 0 1 [[true]] [[true]]) with
+           | .ok (.transversalCNOTBatch spec, _, _) =>
+               spec.controlBlock == 0 && spec.targetBlock == 1 &&
+               spec.incidence == [[true]] && spec.logicalIncidence == [[true]]
+           | _ => false) = true := by decide
+
+example : (match compile? .executable { caps := [], anc := ⟨2, 0⟩ } ttwoQ
+              [.transversalLogicalCNOTBatch 0 1 [[true]] [[true]]] with
+           | .ok c => ok? (checkLogicalExec [] ttwoQ c.prog)
+           | _ => false) = true := by decide
+
 /-! ### §5·M14. Addressability: `hGate`/`sGate` direct ONLY on a single-logical block.
 
     `tenvQ2` is a VALID `k=2` block (two logical qubits, `n=2`, no stabilizers). -/

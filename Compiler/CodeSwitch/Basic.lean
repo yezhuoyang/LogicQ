@@ -36,11 +36,22 @@ structure PhysMap where
   srcN   : Nat
   tgtN   : Nat
   matrix : BoolMat
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-- The map has the declared shape (`tgtN` rows, each of width `srcN`). -/
 def PhysMap.shapeWf (φ : PhysMap) : Bool :=
   decide (φ.matrix.length = φ.tgtN) && φ.matrix.all (fun r => decide (r.length = φ.srcN))
+
+/-- Reinterpret the column-style physical map as a row-vector action on Pauli/check rows. -/
+def PhysMap.applyRows (φ : PhysMap) (rows : BoolMat) : BoolMat :=
+  matMul rows (transpose φ.matrix φ.srcN) φ.tgtN
+
+/-- Physical transversality/sparsity: every source and target coordinate is used at
+    most once. -/
+def PhysMap.physicallyTransversal (φ : PhysMap) : Bool :=
+  φ.shapeWf &&
+  φ.matrix.all TypeChecker.Internal.atMostOneTrue &&
+  (transpose φ.matrix φ.srcN).all TypeChecker.Internal.atMostOneTrue
 
 /-! ## §2. Chain-map / stabilizer-preservation certificate. -/
 
@@ -57,6 +68,41 @@ structure ChainMapCert where
 /-- The COMPUTABLE part of a chain-map cert: the physical map is well-shaped. -/
 def ChainMapCert.structuralCheck (c : ChainMapCert) : Bool := c.map.shapeWf
 
+/-- Recompute stabilizer preservation instead of trusting the recorded claim. -/
+def ChainMapCert.stabilizerPreserved (c : ChainMapCert) (srcStab tgtStab : BoolMat) : Bool :=
+  (c.map.applyRows srcStab).all (fun r => inSpan tgtStab r)
+
+/-- The currently checkable part of a chain-map certificate. -/
+def ChainMapCert.verifiedCheck (c : ChainMapCert) (srcStab tgtStab : BoolMat) : Bool :=
+  c.map.physicallyTransversal && c.stabilizerPreserved srcStab tgtStab
+
+/-! ## §2b. One computable chain-map square. -/
+
+/-- A single chain-map square in row-vector convention. -/
+structure ChainMapSquare where
+  srcBoundary : BoolMat
+  tgtBoundary : BoolMat
+  highMap     : PhysMap
+  lowMap      : PhysMap
+  deriving Repr
+
+def ChainMapSquare.shapeWf (s : ChainMapSquare) : Bool :=
+  s.highMap.shapeWf && s.lowMap.shapeWf &&
+  decide (s.srcBoundary.length = s.highMap.srcN) &&
+  s.srcBoundary.all (fun r => decide (r.length = s.lowMap.srcN)) &&
+  decide (s.tgtBoundary.length = s.highMap.tgtN) &&
+  s.tgtBoundary.all (fun r => decide (r.length = s.lowMap.tgtN))
+
+/-- Check `tgtBoundary ∘ highMap = lowMap ∘ srcBoundary`. -/
+def ChainMapSquare.commutes (s : ChainMapSquare) : Bool :=
+  let highRows := s.highMap.applyRows (TypeChecker.idMat s.highMap.srcN)
+  let viaTarget := matMul highRows s.tgtBoundary s.lowMap.tgtN
+  let viaSource := s.lowMap.applyRows s.srcBoundary
+  decide (viaTarget = viaSource)
+
+def ChainMapSquare.verifiedCheck (s : ChainMapSquare) : Bool :=
+  s.shapeWf && s.commutes
+
 /-! ## §3. Induced logical map + injectivity (logical transversality). -/
 
 /-- The induced map `γ̄` on LOGICAL operators, with its injectivity flag.  Injective
@@ -70,6 +116,15 @@ structure LogicalInjectionCert where
 /-- A logical map is acceptable only if it is (claimed) injective: a non-injective
     induced map is NOT logically transversal. -/
 def LogicalInjectionCert.structuralCheck (c : LogicalInjectionCert) : Bool := c.claimedInjective
+
+/-- Recompute injectivity of the represented logical map by row rank. -/
+def LogicalInjectionCert.computableInjective (c : LogicalInjectionCert) : Bool :=
+  rank c.inducedLogicalMap == c.inducedLogicalMap.length
+
+/-- The injection is verified iff the recomputed rank-injectivity holds AND the recorded
+    `claimedInjective` flag AGREES with it (so the flag is load-bearing, never ignored). -/
+def LogicalInjectionCert.verifiedCheck (c : LogicalInjectionCert) : Bool :=
+  c.claimedInjective && c.computableInjective
 
 /-! ## §4. Homomorphic CNOT (one-way) certificate. -/
 
@@ -99,6 +154,12 @@ def HomomorphicCNOTCert.structuralCheck (cert : HomomorphicCNOTCert) : Bool :=
     homomorphic CNOTs in parallel — 2510.07269 disjoint-image condition). -/
 def disjointSupports (a b : List Nat) : Bool := a.all (fun x => ! b.contains x)
 
+/-- The image (nonzero-row indices) of a `γ` map — its physical-qubit support.  Defined here
+    (upstream of both `DimensionJump` and `QLDPCPapers`) so disjointness is COMPUTED from the
+    actual map, never caller-supplied. -/
+def physMapImageRows (φ : PhysMap) : List Nat :=
+  (List.range φ.matrix.length).filter (fun i => (φ.matrix.getD i []).any (fun b => b))
+
 /-! ## §6. Deferred fault obligations + the top-level switch protocol cert. -/
 
 /-- Fault obligations a switch DEFERS (uncertified here). -/
@@ -110,7 +171,8 @@ structure SwitchFaultObligations where
 
 /-- The top-level CODE-SWITCH / dimension-jump protocol certificate: source/target
     blocks, the chain map, the induced logical injection, the disjoint-image flag
-    (for batched parallel jumps), and the DEFERRED fault obligations. -/
+    (for batched parallel jumps), deferred fault obligations, and an optional
+    checked distance lower-bound obligation. -/
 structure SwitchProtocolCert where
   srcBlock        : Nat
   tgtBlock        : Nat
@@ -118,14 +180,37 @@ structure SwitchProtocolCert where
   injection       : LogicalInjectionCert
   disjointFromOthers : Bool                  -- safe to run in parallel with its batch
   deferred        : SwitchFaultObligations
+  distance        : Option DistanceObligation := none
   deriving Repr
 
-/-- The COMPUTABLE checks: well-shaped chain map, injective induced logical map, and
-    the fault obligations HONESTLY deferred (all `false`).  Does NOT certify
-    distance / fault-distance / full switch correctness. -/
+/-- Distance is either honestly deferred (`distancePreserved = false`) or backed
+    by a verified lower-bound obligation. -/
+def SwitchProtocolCert.distanceCheck (c : SwitchProtocolCert) : Bool :=
+  match c.distance with
+  | some obligation => obligation.verifiedCheck
+  | none => ! c.deferred.distancePreserved
+
+/-- The COMPUTABLE checks: well-shaped chain map, injective induced logical map,
+    distance either honestly deferred or checked, and the remaining fault
+    obligations honestly deferred.  Does NOT certify circuit fault-distance,
+    decoder threshold, or full stochastic switch correctness. -/
 def SwitchProtocolCert.structuralCheck (c : SwitchProtocolCert) : Bool :=
   c.chain.structuralCheck && c.injection.structuralCheck
-  && ! c.deferred.distancePreserved && ! c.deferred.faultDistance && ! c.deferred.decoderThreshold
+  && c.distanceCheck && ! c.deferred.faultDistance && ! c.deferred.decoderThreshold
+
+/-- Recompute the GF(2)-checkable part of a code-switch protocol.  Distance can
+    be discharged by a `DistanceObligation`; decoder/fault-distance conditions
+    still stay deferred here. -/
+def SwitchProtocolCert.verifiedCheck (c : SwitchProtocolCert) (srcStab tgtStab : BoolMat) : Bool :=
+  c.chain.verifiedCheck srcStab tgtStab &&
+  c.injection.verifiedCheck &&
+  c.disjointFromOthers &&
+  c.distanceCheck && ! c.deferred.faultDistance && ! c.deferred.decoderThreshold
+
+def SwitchProtocolCert.verify? (c : SwitchProtocolCert) (srcStab tgtStab : BoolMat) :
+    Except TypeError SwitchProtocolCert :=
+  if c.verifiedCheck srcStab tgtStab then .ok c
+  else .error (.certFailed "code-switch protocol failed recomputed GF(2) checks")
 
 /-! ## §7. Tiny tests. -/
 
@@ -141,10 +226,25 @@ example : ChainMapCert.structuralCheck
     { map := { srcN := 2, tgtN := 2, matrix := [[true, false, false]] },
       claimedChainCommutes := true, claimedStabilizerPreserved := true } = false := by decide
 example : goodChain.structuralCheck = true := by decide
+example : goodChain.map.physicallyTransversal = true := by decide
+example : goodChain.verifiedCheck [[true, false]] [[true, false]] = true := by decide
+example : goodChain.verifiedCheck [[true, false]] [[false, true]] = false := by decide
+
+def goodSquare : ChainMapSquare :=
+  { srcBoundary := [[true, false], [false, true]],
+    tgtBoundary := [[true, false], [false, true]],
+    highMap := goodChain.map,
+    lowMap := goodChain.map }
+
+example : goodSquare.verifiedCheck = true := by decide
+example : { goodSquare with tgtBoundary := [[false, true], [true, false]] }.verifiedCheck = false := by decide
 
 -- NON-INJECTIVE induced logical map is rejected (not logically transversal):
 example : LogicalInjectionCert.structuralCheck { inducedLogicalMap := [[true]], claimedInjective := false } = false := by decide
 example : goodInjection.structuralCheck = true := by decide
+example : goodInjection.verifiedCheck = true := by decide
+example : LogicalInjectionCert.verifiedCheck
+    { inducedLogicalMap := [[true, false], [true, false]], claimedInjective := true } = false := by decide
 
 -- DIRECTION matters: a `0 ▸ 1` homomorphic CNOT matches `0 ▸ 1` but NOT the reversal `1 ▸ 0`:
 def cnot01 : HomomorphicCNOTCert :=
@@ -166,6 +266,8 @@ def goodSwitch : SwitchProtocolCert :=
 -- VALID switch syntax: well-shaped chain, injective induced map, all faults deferred.
 example : goodSwitch.structuralCheck = true := by decide
 example : goodSwitch.deferred.faultDistance = false := by decide
+example : goodSwitch.verifiedCheck [[true, false]] [[true, false]] = true := by decide
+example : ok? (goodSwitch.verify? [[true, false]] [[true, false]]) = true := by decide
 -- INVALID switch syntax #1: a shape-mismatched chain map FAILS the structural check.
 def badShapeSwitch : SwitchProtocolCert :=
   { goodSwitch with chain :=
@@ -175,7 +277,39 @@ example : badShapeSwitch.structuralCheck = false := by decide
 -- INVALID switch syntax #2: a non-injective induced logical map FAILS (not logically transversal).
 example : SwitchProtocolCert.structuralCheck
     { goodSwitch with injection := { inducedLogicalMap := [[true]], claimedInjective := false } } = false := by decide
+example : SwitchProtocolCert.verifiedCheck
+    { goodSwitch with injection := { inducedLogicalMap := [[true], [true]], claimedInjective := true } }
+    [[true, false]] [[true, false]] = false := by decide
+-- Concern 3: `claimedInjective` is LOAD-BEARING in the VERIFIED path.  The matrix below is
+-- rank-injective (`computableInjective = true`), so the ONLY thing distinguishing accept from
+-- reject is the flag — `verifiedCheck = claimedInjective && computableInjective` rejects when
+-- the flag dishonestly disagrees with the recomputed rank:
+example : LogicalInjectionCert.computableInjective
+    { inducedLogicalMap := [[true, false], [false, true]], claimedInjective := false } = true := by decide
+example : LogicalInjectionCert.verifiedCheck
+    { inducedLogicalMap := [[true, false], [false, true]], claimedInjective := false } = false := by decide
+example : LogicalInjectionCert.verifiedCheck
+    { inducedLogicalMap := [[true, false], [false, true]], claimedInjective := true } = true := by decide
+-- …and `SwitchProtocolCert.verifiedCheck` inherits it (delegates to `injection.verifiedCheck`):
+example : SwitchProtocolCert.verifiedCheck
+    { goodSwitch with injection := { inducedLogicalMap := [[true, false], [false, true]], claimedInjective := false } }
+    [[true, false]] [[true, false]] = false := by decide
 -- INVALID switch syntax #3: dishonestly marking the distance CERTIFIED FAILS the check.
 example : SwitchProtocolCert.structuralCheck { goodSwitch with deferred := { distancePreserved := true } } = false := by decide
+def goodDistanceObligation : DistanceObligation :=
+  { required := 1,
+    reason := "toy checked lower bound",
+    bounds := ChainQ.paperTableExact "toy exact distance theorem" 1 }
+def goodSwitchWithDistance : SwitchProtocolCert :=
+  { goodSwitch with deferred := { distancePreserved := true }, distance := some goodDistanceObligation }
+example : goodSwitchWithDistance.structuralCheck = true := by decide
+example : goodSwitchWithDistance.verifiedCheck [[true, false]] [[true, false]] = true := by decide
+def badDistanceObligation : DistanceObligation :=
+  { goodDistanceObligation with required := 2 }
+def badSwitchWithDistance : SwitchProtocolCert :=
+  { goodSwitch with deferred := { distancePreserved := true }, distance := some badDistanceObligation }
+example : badSwitchWithDistance.structuralCheck = false := by decide
+example : SwitchProtocolCert.verifiedCheck { goodSwitch with disjointFromOthers := false }
+    [[true, false]] [[true, false]] = false := by decide
 
 end Compiler.CodeSwitch

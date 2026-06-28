@@ -1,21 +1,75 @@
 # Compiler/PPR2PPM
 
-Placeholder for the PPR-to-PPM pass.
+> Proof-carrying evidence for a single type-checked PPM fragment (a placeholder home for a future PPR-to-PPM lowering pass).
 
-## Current Status
+This folder sits late in the LogicQ stack, on the path from the Mixed IR toward the PPM measurement sublanguage. Despite the `PPR2PPM` name, there is currently **no** Pauli-product-rotation lowering pass here. After the M9 design shift the standalone PPM-only compiler was superseded by `Compiler.Mixed` (where PPM is one checked target among transversal gates, automorphisms, and code switches), so what remains is the proof-carrying evidence that a single `PPM.Stmt` fragment passes the TypeChecker's `checkPPMProgram`.
 
-The folder currently contains proof-carrying evidence for a single PPM fragment,
-not a full PPR lowering pass.
+## What's here
 
-## Intended Rule
+| Module | Role |
+| --- | --- |
+| [Basic.lean](Basic.lean) | `CompiledPPM` evidence wrapper, the `mkCompiledPPM?` validator, three soundness `theorem`s, and two `by decide` tests. |
 
-A future pass should lower Pauli-product rotations to adaptive Pauli
-measurements while preserving the denotation and tracking magic resources.
+## Key definitions
+
+```lean
+/-- A PPM program FRAGMENT carrying the proof that it type-checks. -/
+structure CompiledPPM (Γ : TypedEnv) (caps : List Capability) where
+  stmt  : PPM.Stmt
+  typed : ok? (checkPPMProgram Γ caps stmt) = true
+```
+
+```lean
+/-- Validate a raw PPM fragment into proof-carrying evidence. -/
+def mkCompiledPPM? (Γ : TypedEnv) (caps : List Capability) (s : PPM.Stmt) :
+    Except TypeError (CompiledPPM Γ caps) :=
+  if h : ok? (checkPPMProgram Γ caps s) = true then .ok ⟨s, h⟩
+  else .error (.other "PPM fragment does not type-check under the environment")
+```
+
+```lean
+/-- Every measurement emitted by a compiled fragment is LEGAL under the
+    TypeChecker (via the structural `checkPPMStmt_meas_sound`). -/
+theorem CompiledPPM.meas_legal {Γ : TypedEnv} {caps : List Capability}
+    (c : CompiledPPM Γ caps) :
+    (measTargets c.stmt).all (fun P => ok? (checkPPM Γ caps P)) = true
+```
+
+```lean
+/-- Every `frame`/`discard` of a compiled fragment targets a valid logical qubit. -/
+theorem CompiledPPM.targets_valid {Γ : TypedEnv} {caps : List Capability}
+    (c : CompiledPPM Γ caps) :
+    (frameDiscardTargets c.stmt).all (validLQubit Γ) = true
+```
+
+(There is also `CompiledPPM.wellFormed`, which simply re-exposes the `typed` proof field.)
 
 ## Example
 
-Use this folder as the future home for the theorem usually shaped like:
-
-```text
-denote(PPR program) = semantics(lowered PPM program)
+```lean
+-- a native single-qubit measurement fragment validates into evidence:
+example : ok? (mkCompiledPPM? tenvQ [] (.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)])) = true := by decide
+-- an empty / non-native measurement fragment is rejected:
+example : ok? (mkCompiledPPM? tenvQ [] (.meas 0 [])) = false := by decide
 ```
+
+These two `by decide` tests (D-tier) show that a single-qubit `Z` measurement on logical qubit `⟨0,0⟩` validates into proof-carrying evidence under `tenvQ` with no capabilities, while an empty measurement list is rejected.
+
+Source: [Basic.lean](Basic.lean) (lines 55-58).
+
+## Status & scope
+
+Honest scope, mirroring [Compiler/CONTRACT.md](../CONTRACT.md):
+
+- **Proved (P):** the three `theorem`s — `CompiledPPM.wellFormed`, `CompiledPPM.meas_legal`, and `CompiledPPM.targets_valid` — are universally-quantified soundness statements over any compiled fragment. They establish well-formedness, measurement legality (via `checkPPMStmt_meas_sound`), and target validity (via `checkPPMStmt_targets_valid`) at the **type-checking** level only.
+- **Decided (D):** the two `example ... := by decide` smoke tests above.
+- **Planned / stub (M):** the actual PPR-to-PPM lowering pass. There is **no** code here that lowers Pauli-product rotations to adaptive PPM, and **no** denotational/operational-equivalence theorem of the intended shape `denote(PPR program) = semantics(lowered PPM program)`. Magic-resource tracking for such a pass is likewise not present.
+
+Nothing here makes a channel-correctness, fault-tolerance, distance, or decoder claim; the guarantees are confined to TypeChecker legality of a measurement fragment.
+
+## See also
+
+- [../README.md](../README.md) — the Compiler layer overview.
+- [../CONTRACT.md](../CONTRACT.md) — the correctness-boundary matrix (P / D / A / M tiers).
+
+(This folder has no child directories.)

@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 360" width="980" height="360" role="img" aria-label="LogicQ compilation pipeline">
+  <defs>
+    <linearGradient id="pl-box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="pl-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <marker id="pl-arrow" markerWidth="11" markerHeight="11" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#22d3ee"/>
+    </marker>
+    <marker id="pl-arrow-dim" markerWidth="11" markerHeight="11" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="980" height="360" rx="16" fill="#0b1220"/>
+
+  <!-- top accent bar -->
+  <rect x="0" y="0" width="980" height="6" rx="3" fill="url(#pl-accent)"/>
+
+  <!-- Stage box helper rendered inline -->
+  <!-- Row 1: the wired front-end path -->
+  <g font-family="'Segoe UI', Arial, sans-serif">
+    <!-- ChainQ -->
+    <g transform="translate(30,70)">
+      <rect width="150" height="74" rx="10" fill="url(#pl-box)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="75" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#e2e8f0">ChainQ</text>
+      <text x="75" y="52" text-anchor="middle" font-size="11" fill="#94a3b8">CSS code families</text>
+      <text x="75" y="66" text-anchor="middle" font-size="11" fill="#94a3b8">(chain complexes)</text>
+    </g>
+    <!-- TypeChecker -->
+    <g transform="translate(240,70)">
+      <rect width="150" height="74" rx="10" fill="url(#pl-box)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="75" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#e2e8f0">TypeChecker</text>
+      <text x="75" y="52" text-anchor="middle" font-size="11" fill="#94a3b8">legal logical ops</text>
+      <text x="75" y="66" text-anchor="middle" font-size="11" fill="#94a3b8">TypedEnv</text>
+    </g>
+    <!-- Compiler / Mixed IR -->
+    <g transform="translate(450,70)">
+      <rect width="150" height="74" rx="10" fill="url(#pl-box)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="75" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#e2e8f0">Mixed IR</text>
+      <text x="75" y="52" text-anchor="middle" font-size="11" fill="#94a3b8">ppm/transversal</text>
+      <text x="75" y="66" text-anchor="middle" font-size="11" fill="#94a3b8">switch/magic/pauli</text>
+    </g>
+    <!-- QStab -->
+    <g transform="translate(660,70)">
+      <rect width="140" height="74" rx="10" fill="url(#pl-box)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="70" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#e2e8f0">QStab</text>
+      <text x="70" y="52" text-anchor="middle" font-size="11" fill="#94a3b8">stabilizer</text>
+      <text x="70" y="66" text-anchor="middle" font-size="11" fill="#94a3b8">dataflow</text>
+    </g>
+    <!-- QClifford -->
+    <g transform="translate(830,70)">
+      <rect width="120" height="74" rx="10" fill="url(#pl-box)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="60" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#e2e8f0">QClifford</text>
+      <text x="60" y="52" text-anchor="middle" font-size="11" fill="#94a3b8">Clifford +</text>
+      <text x="60" y="66" text-anchor="middle" font-size="11" fill="#94a3b8">measurement</text>
+    </g>
+
+    <!-- solid wired arrows -->
+    <g stroke="#22d3ee" stroke-width="2.5" fill="none">
+      <line x1="182" y1="107" x2="236" y2="107" marker-end="url(#pl-arrow)"/>
+      <line x1="392" y1="107" x2="446" y2="107" marker-end="url(#pl-arrow)"/>
+      <line x1="602" y1="107" x2="656" y2="107" marker-end="url(#pl-arrow)"/>
+      <line x1="802" y1="107" x2="826" y2="107" marker-end="url(#pl-arrow)"/>
+    </g>
+
+    <!-- Row 2: standalone specs / planned passes -->
+    <g transform="translate(450,210)">
+      <rect width="150" height="64" rx="10" fill="url(#pl-box)" stroke="#475569" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="75" y="28" text-anchor="middle" font-size="16" font-weight="700" fill="#cbd5e1">PPR · PPM</text>
+      <text x="75" y="48" text-anchor="middle" font-size="11" fill="#64748b">Pauli rotations /</text>
+      <text x="75" y="60" text-anchor="middle" font-size="11" fill="#64748b">measurements</text>
+    </g>
+    <g transform="translate(660,210)">
+      <rect width="140" height="64" rx="10" fill="url(#pl-box)" stroke="#475569" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="70" y="28" text-anchor="middle" font-size="16" font-weight="700" fill="#cbd5e1">Surgery</text>
+      <text x="70" y="48" text-anchor="middle" font-size="11" fill="#64748b">LS / CodeSwitch /</text>
+      <text x="70" y="60" text-anchor="middle" font-size="11" fill="#64748b">MagicQ</text>
+    </g>
+
+    <!-- planned dashed arrows down/across -->
+    <g stroke="#64748b" stroke-width="2" fill="none" stroke-dasharray="5 4">
+      <path d="M525,148 L525,206" marker-end="url(#pl-arrow-dim)"/>
+      <path d="M602,242 L656,170" marker-end="url(#pl-arrow-dim)"/>
+      <path d="M730,206 L730,148" marker-end="url(#pl-arrow-dim)"/>
+    </g>
+  </g>
+
+  <!-- legend -->
+  <g font-family="'Segoe UI', Arial, sans-serif" font-size="12" transform="translate(30,300)">
+    <line x1="0" y1="14" x2="34" y2="14" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#pl-arrow)"/>
+    <text x="44" y="18" fill="#cbd5e1">wired &amp; soundness-proven edge (compile? / extraction)</text>
+    <line x1="430" y1="14" x2="464" y2="14" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#pl-arrow-dim)"/>
+    <text x="474" y="18" fill="#94a3b8">planned pass / standalone verified spec</text>
+  </g>
+  <text x="30" y="346" font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#475569">Each box is a small language with its own syntax, semantics, and checker. Honest scope: see Compiler/CONTRACT.md</text>
+</svg>

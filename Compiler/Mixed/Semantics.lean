@@ -62,6 +62,22 @@ inductive Step (I : MixedInterp Q) (caps : List Capability) :
       (hc : checkInstr caps s.env s.resource (.transversal b g) = .ok (Γ', R')) :
       Step I caps (.transversal b g) s
         { s with env := Γ', resource := R', quantum := I.clifford (Internal.transversalMap (blockN s.env b) g) s.quantum }
+  | transversalCNOT (spec : TransversalCNOTSpec) (s : ExecState Q) (Γ' : TypedEnv) (R' : PPMState)
+      (hc : checkInstr caps s.env s.resource (.transversalCNOT spec) = .ok (Γ', R')) :
+      Step I caps (.transversalCNOT spec) s
+        { s with env := Γ', resource := R',
+                 quantum := I.clifford
+                   (match s.env.block? spec.control.blk, s.env.block? spec.target.blk with
+                    | some cTB, some tTB => Internal.cnotMap cTB.block.n tTB.block.n spec.incidence
+                    | _, _ => []) s.quantum }
+  | transversalCNOTBatch (spec : TransversalCNOTBatchSpec) (s : ExecState Q) (Γ' : TypedEnv) (R' : PPMState)
+      (hc : checkInstr caps s.env s.resource (.transversalCNOTBatch spec) = .ok (Γ', R')) :
+      Step I caps (.transversalCNOTBatch spec) s
+        { s with env := Γ', resource := R',
+                 quantum := I.clifford
+                   (match s.env.block? spec.controlBlock, s.env.block? spec.targetBlock with
+                    | some cTB, some tTB => Internal.cnotMap cTB.block.n tTB.block.n spec.incidence
+                    | _, _ => []) s.quantum }
   | automorphism (b : Nat) (M : BoolMat) (s : ExecState Q) (Γ' : TypedEnv) (R' : PPMState)
       (hc : checkInstr caps s.env s.resource (.automorphism b M) = .ok (Γ', R')) :
       Step I caps (.automorphism b M) s
@@ -101,6 +117,8 @@ theorem Step_implies_checkInstr (I : MixedInterp Q) (caps : List Capability)
     ∃ Γ' R', checkInstr caps s.env s.resource instr = .ok (Γ', R') := by
   cases h with
   | transversal _ _ _ Γ' R' hc => exact ⟨Γ', R', hc⟩
+  | transversalCNOT _ _ Γ' R' hc => exact ⟨Γ', R', hc⟩
+  | transversalCNOTBatch _ _ Γ' R' hc => exact ⟨Γ', R', hc⟩
   | automorphism _ _ _ Γ' R' hc => exact ⟨Γ', R', hc⟩
   | switch _ _ _ _ Γ' R' hc => exact ⟨Γ', R', hc⟩
   | ppm _ _ Γ' R' _ _ _ _ hc _ => exact ⟨Γ', R', hc⟩
@@ -141,6 +159,28 @@ theorem no_step_magic (I : MixedInterp Q) (caps : List Capability) (ob : MagicOb
 theorem Step_transversal_realizes (I : MixedInterp Q) (caps : List Capability) (b : Nat)
     (g : BoolMat) (s s' : ExecState Q) (h : Step I caps (.transversal b g) s s') :
     s'.quantum = I.clifford (Internal.transversalMap (blockN s.env b) g) s.quantum := by
+  cases h; rfl
+
+/-- **Per-instruction realization (inter-block transversal CNOT).** -/
+theorem Step_transversalCNOT_realizes (I : MixedInterp Q) (caps : List Capability)
+    (spec : TransversalCNOTSpec) (s s' : ExecState Q)
+    (h : Step I caps (.transversalCNOT spec) s s') :
+    s'.quantum =
+      I.clifford
+        (match s.env.block? spec.control.blk, s.env.block? spec.target.blk with
+         | some cTB, some tTB => Internal.cnotMap cTB.block.n tTB.block.n spec.incidence
+         | _, _ => []) s.quantum := by
+  cases h; rfl
+
+/-- **Per-instruction realization (batched inter-block transversal CNOT).** -/
+theorem Step_transversalCNOTBatch_realizes (I : MixedInterp Q) (caps : List Capability)
+    (spec : TransversalCNOTBatchSpec) (s s' : ExecState Q)
+    (h : Step I caps (.transversalCNOTBatch spec) s s') :
+    s'.quantum =
+      I.clifford
+        (match s.env.block? spec.controlBlock, s.env.block? spec.targetBlock with
+         | some cTB, some tTB => Internal.cnotMap cTB.block.n tTB.block.n spec.incidence
+         | _, _ => []) s.quantum := by
   cases h; rfl
 
 /-- **Per-instruction realization (automorphism).** -/
@@ -200,6 +240,20 @@ theorem progress_transversal (I : MixedInterp Q) (caps : List Capability) (b : N
     (hc : checkInstr caps s.env s.resource (.transversal b g) = .ok (Γ', R')) :
     ∃ s', Step I caps (.transversal b g) s s' :=
   ⟨_, Step.transversal b g s Γ' R' hc⟩
+
+/-- **Progress (direct fragment): a checked transversal CNOT can step.** -/
+theorem progress_transversalCNOT (I : MixedInterp Q) (caps : List Capability)
+    (spec : TransversalCNOTSpec) (s : ExecState Q) {Γ' : TypedEnv} {R' : PPMState}
+    (hc : checkInstr caps s.env s.resource (.transversalCNOT spec) = .ok (Γ', R')) :
+    ∃ s', Step I caps (.transversalCNOT spec) s s' :=
+  ⟨_, Step.transversalCNOT spec s Γ' R' hc⟩
+
+/-- **Progress (direct fragment): a checked batched transversal CNOT can step.** -/
+theorem progress_transversalCNOTBatch (I : MixedInterp Q) (caps : List Capability)
+    (spec : TransversalCNOTBatchSpec) (s : ExecState Q) {Γ' : TypedEnv} {R' : PPMState}
+    (hc : checkInstr caps s.env s.resource (.transversalCNOTBatch spec) = .ok (Γ', R')) :
+    ∃ s', Step I caps (.transversalCNOTBatch spec) s s' :=
+  ⟨_, Step.transversalCNOTBatch spec s Γ' R' hc⟩
 
 /-- **Progress (direct fragment): a checked automorphism can step.** -/
 theorem progress_automorphism (I : MixedInterp Q) (caps : List Capability) (b : Nat)
@@ -407,6 +461,8 @@ inductive GadgetBoundary
     placeholder gadget (`progCZAt`); `provenChannel` is currently witnessed by NO op. -/
 def opBoundary : LogicalOp → GadgetBoundary
   | .hGate _ | .sGate _ | .xGate _ | .zGate _ | .blockTransversal _ _ => .exact
+  | .transversalLogicalCNOT _ _ _ => .exact
+  | .transversalLogicalCNOTBatch _ _ _ _ => .exact
   | .cnotGate _ _ | .czGate _ _ | .measure _ _ => .idealChannel
   | .tGate _ => .typecheckedOnly
 

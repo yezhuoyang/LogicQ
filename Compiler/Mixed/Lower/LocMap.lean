@@ -35,6 +35,9 @@ def LogicalOp.resolve (m : LocMap) : LogicalOp → LogicalOp
   | .hGate q      => .hGate (m.loc q)
   | .sGate q      => .sGate (m.loc q)
   | .cnotGate c t => .cnotGate (m.loc c) (m.loc t)
+  | .transversalLogicalCNOT c t incidence => .transversalLogicalCNOT (m.loc c) (m.loc t) incidence
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence
   | .tGate q      => .tGate (m.loc q)
   | .blockTransversal b g => .blockTransversal b g   -- block-level: no per-qubit alias to resolve
   | .xGate q      => .xGate (m.loc q)

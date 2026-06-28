@@ -36,6 +36,8 @@ structure MagicObligation where
 inductive MixedInstr
   | ppm          (s : PPM.Stmt)                          -- a native PPM/PPU fragment
   | transversal  (b : Nat) (g : BoolMat)                 -- a local single-qubit transversal gate
+  | transversalCNOT (spec : TransversalCNOTSpec)          -- an inter-block incidence-checked logical CNOT
+  | transversalCNOTBatch (spec : TransversalCNOTBatchSpec) -- a batched high-rate logical CNOT incidence
   | automorphism (b : Nat) (M : BoolMat)                 -- an arbitrary symplectic logical automorphism
   | switch       (b : Nat) (D : Block) (cert : SwitchCert)      -- a code switch (consumes/transforms b)
   | magic        (ob : MagicObligation)                  -- a deferred, TYPED magic-state obligation (e.g. T)
@@ -70,6 +72,9 @@ inductive LogicalOp
   | hGate          (q : LQubit)
   | sGate          (q : LQubit)
   | cnotGate       (control target : LQubit)
+  | transversalLogicalCNOT (control target : LQubit) (incidence : BoolMat)
+  | transversalLogicalCNOTBatch (controlBlock targetBlock : Nat)
+      (incidence logicalIncidence : BoolMat)
   | tGate          (q : LQubit)
   | blockTransversal (b : Nat) (g : BoolMat)   -- a BLOCK-LEVEL direct transversal (acts on all of `b`)
   -- M16 (Pauli / frame level): the bit-/phase-flip Paulis and the controlled-Z.
@@ -96,6 +101,14 @@ def sGate2x2 : BoolMat := [[true, true], [false, true]]     -- S : X ↦ Y, Z �
     PPM/switch/magic, which are not a single pure logical unitary on a block). -/
 def MixedInstr.action (Γ : TypedEnv) : MixedInstr → Option BoolMat
   | .transversal b g  => (Γ.block? b).map (fun tb => Internal.transversalMap tb.block.n g)
+  | .transversalCNOT spec =>
+      match Γ.block? spec.control.blk, Γ.block? spec.target.blk with
+      | some cTB, some tTB => some (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+      | _, _ => none
+  | .transversalCNOTBatch spec =>
+      match Γ.block? spec.controlBlock, Γ.block? spec.targetBlock with
+      | some cTB, some tTB => some (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+      | _, _ => none
   | .automorphism _ M => some M
   | _                 => none
 

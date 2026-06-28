@@ -39,6 +39,9 @@ def progOpOk (caps : List Capability) (res : Resources)
   | .hGate q      => srcOpOk Γ R (.hGate q) && validLQubit Γ res.anc          -- ancilla (gadget fallback)
   | .sGate q      => srcOpOk Γ R (.sGate q) && validLQubit Γ res.anc
   | .cnotGate c t => srcOpOk Γ R (.cnotGate c t) && (! (c == t)) && validLQubit Γ res.anc  -- control≠target + ancilla
+  | .transversalLogicalCNOT c t incidence => srcOpOk Γ R (.transversalLogicalCNOT c t incidence)
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      srcOpOk Γ R (.transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence)
   | .tGate q      => srcOpOk Γ R (.tGate q) && res.allowMagic && validLQubit Γ res.anc      -- T/magic policy + magic ancilla
   | .blockTransversal b g => srcOpOk Γ R (.blockTransversal b g)   -- direct block op: no ancilla needed
   | .xGate q      => srcOpOk Γ R (.xGate q)                        -- Pauli frame update: no ancilla
@@ -104,6 +107,9 @@ theorem ProgramOkSupported_compiles (caps : List Capability) (anc : LQubit) :
       exact ⟨.transversal q.blk sGate2x2 :: prog', by simp only [compileProgram, hop, hprog']⟩
     | measure r P  => simp only [ProgramOkSupported] at h; exact absurd h (by simp)
     | cnotGate c t => simp only [ProgramOkSupported] at h; exact absurd h (by simp)
+    | transversalLogicalCNOT c t incidence => simp only [ProgramOkSupported] at h; exact absurd h (by simp)
+    | transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      simp only [ProgramOkSupported] at h; exact absurd h (by simp)
     | tGate q      => simp only [ProgramOkSupported] at h; exact absurd h (by simp)
     | blockTransversal b g => simp only [ProgramOkSupported] at h; exact absurd h (by simp)
     | xGate q      => simp only [ProgramOkSupported] at h; exact absurd h (by simp)

@@ -19,6 +19,9 @@ import ChainQ.ChainComplex
 import ChainQ.Materialize.Basic
 import ChainQ.Families
 import ChainQ.Params
+import ChainQ.Distance
 import ChainQ.Error
 import ChainQ.Checked
+import ChainQ.LogicalIndex
+import ChainQ.Syntax
 import ChainQ.Materialize.Tests

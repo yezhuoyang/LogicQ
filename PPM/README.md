@@ -1,42 +1,82 @@
 # PPM
 
-QMeas-style adaptive Pauli-product measurement programs over logical qubits.
+> The QMeas measurement-based language (level `L_PPM`): adaptive Pauli-product measurement programs over **logical** qubits.
 
-## Syntax
+PPM is the surface language whose every primitive maps one-to-one onto a native lattice-surgery operation: Pauli-product measurement, Pauli-frame byproduct update, destructive readout, and classical control. It operates entirely on logical qubits (`LQubit = ⟨block, index⟩`); physical qubits appear only after lowering to QStab/QClifford. In the LogicQ stack, PPM programs are emitted by the higher levels (PPR / Compiler Mixed IR), checked for legality by `TypeChecker.Judgment.PPMProgram`, and carry a small-step operational semantics from which the measurement-gadget frame tables are derived.
 
-```text
-MTarget ::= (LQubit -> X|Y|Z)*
-Stmt    ::= meas r MTarget
-          | frame q (X|Y|Z)
-          | discard q
-          | ite r then else
-          | forLoop n body
-          | skip
-          | seq s t
-          | abort
+## What's here
+
+| Module | Role |
+| --- | --- |
+| [Basic.lean](Basic.lean) | Umbrella import (`Syntax` + `Semantics`). |
+| [Syntax.lean](Syntax.lean) | Pure-data AST: `Sign`, `PLetter`, `MTarget`, `Stmt`, well-formedness predicates, and the Litinski gadget programs (`progHAt`, `progSAt`, `progCNOTAt`, `progCZAt`, `checkPlus`). |
+| [Semantics.lean](Semantics.lean) | Small-step `Step`/`Steps` relation, the Pauli frame, the parametric `QInterp` state interface, derived head-of-sequence reductions, and the H-gadget frame-table theorem. |
+
+## Key definitions
+
+```lean
+inductive Stmt
+  | meas    (r : CVar) (P : MTarget)
+  | frame   (q : LQubit) (p : PLetter)
+  | discard (q : LQubit)
+  | ite     (r : CVar) (s₁ s₂ : Stmt)
+  | forLoop (n : Nat) (body : Stmt)
+  | skip
+  | seq     (s₁ s₂ : Stmt)
+  | abort
 ```
+(`PPM.Stmt`, [Syntax.lean](Syntax.lean))
 
-The native measurement alphabet is strict: a target has one or two factors and
-does not repeat a logical qubit.
-
-## Semantics
-
-`PPM.Step` is a small-step semantics over:
-
-```text
-quantum carrier, classical store, Pauli frame, remaining statement
+```lean
+/-- The QMeas measurement alphabet is restricted to single- and two-qubit
+    logical Pauli observables (the natively lattice-surgery-realizable ones). -/
+def MTarget.wf (P : MTarget) : Bool :=
+  let qs := P.map Prod.fst
+  (P.length = 1 || P.length = 2) && qs.Nodup
 ```
+(`PPM.MTarget.wf`, [Syntax.lean](Syntax.lean))
 
-Measurements call a parametric projector `QInterp.proj`; frames compose in the
-classical Pauli frame; `abort` is stuck.
+```lean
+/-- The measurement back-action interface: `proj P s ρ` is the normalized
+    projection of `ρ` onto the `s`-eigenspace of the logical Pauli product `P`. -/
+structure QInterp (Q : Type) where
+  proj : MTarget → Sign → Q → Q
 
-## Typechecking Rule
+inductive Step (I : QInterp Q) : Config Q → Label → Config Q → Prop
+```
+(`PPM.QInterp`, `PPM.Step`, [Semantics.lean](Semantics.lean))
 
-PPM program legality is checked in `TypeChecker.Judgment.PPMProgram`.  It
-requires legal measurements, bound classical outcomes for branches, and no use
-after discard.
+```lean
+theorem progH_frame (I : QInterp Q) (ρ : Q) (s₁ s₂ : Sign) :
+    ∃ ℓ ρ' σ' F',
+      Steps I ⟨ρ, Store.empty, Frame.id0, progH⟩ ℓ ⟨ρ', σ', F', .skip⟩ ∧
+      F' (ancQ 0) = hByp s₁ s₂
+```
+(`PPM.progH_frame`, [Semantics.lean](Semantics.lean))
 
 ## Example
 
-`progHAt q anc r1 r2` is the Hadamard measurement gadget.  Its four byproduct
-branches are proven by the PPM step rules.
+```lean
+-- The example programs use only well-formed (1- or 2-qubit) measurements.
+example : MTarget.wf [(dataQ 0, .Z), (ancQ 0, .X)] = true := by decide
+example : MTarget.wf [(dataQ 0, .X)] = true := by decide
+example : MTarget.wf [(dataQ 0, .Z), (dataQ 0, .X)] = false := by decide  -- repeated qubit rejected
+```
+
+These `by decide` checks confirm the native measurement alphabet: a target must have one or two factors and must not repeat a logical qubit. Source: [Syntax.lean](Syntax.lean) (lines 183-185).
+
+## Status & scope
+
+- **Proved (P).** The small-step semantics is mechanized: `Steps.trans`, `Steps.single`, `abort_stuck` (no rule fires on `abort` — it is a genuine stuck terminal), the derived head-of-sequence combinators (`red_meas`, `red_ite_pos`, `red_ite_neg_frame`, `red_ite_pos_into`, `red_ite_neg_into`), the Hadamard-gadget frame table `progH_frame` (all four outcome branches `(+,+)→I, (+,-)→X, (-,+)→Z, (-,-)→Y`), and the post-selection `checkPlus_accepts` / `checkPlus_rejects`. The rewrite `MTarget.wf_eq` holds by `rfl`.
+- **Tested (D).** The `MTarget.wf` alphabet restriction is exercised by `by decide` examples in [Syntax.lean](Syntax.lean).
+- **Assumed / deferred (A).** The quantum state `Q` is **parametric** via `QInterp.proj`; the frame-correction results hold for **any** carrier `Q` and make no claim about a concrete projector's channel correctness. The gadget programs (`progHAt`, `progSAt`, `progCNOTAt`, `progCZAt`) are the Litinski lattice-surgery forms; their exact measurement pattern + channel correctness are the **ideal-gadget assumption** (deferred). `progCZAt` is explicitly flagged a DEMO placeholder (M16) that is shaped to type-check, not proved.
+- **Out of scope here.** Program-level legality (legal measurements, bound classical outcomes for branches, no use-after-discard) is checked elsewhere, in `TypeChecker.Judgment.PPMProgram`, not in this folder. Distance, decoder, and fault-tolerance claims are not made at this level.
+
+These are operational-semantics theorems over the AST; per the contract, soundness-style results are `propext`-clean rather than "axiom-free".
+
+## See also
+
+- [../README.md](../README.md) — LogicQ repository root and stack overview.
+- [../PPR/README.md](../PPR/README.md) — the PPR level above PPM (Pauli-product rotations).
+- [../TypeChecker/Judgment/PPMProgram/README.md](../TypeChecker/Judgment/PPMProgram/README.md) — the PPM-program legality judgment.
+- [../TypeChecker/PPM/README.md](../TypeChecker/PPM/README.md) — PPM-related type-checker support.

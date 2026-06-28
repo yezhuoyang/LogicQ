@@ -4,6 +4,7 @@
 -/
 import TypeChecker.Judgment.Switch.Cert
 import TypeChecker.Core.Block
+import TypeChecker.Core.Distance
 import TypeChecker.Core.Error
 
 namespace TypeChecker
@@ -68,6 +69,17 @@ def checkSwitch (Γ : TypedEnv) (b : BlockId) (D : TypedBlock) (cert : SwitchCer
                inducedLX := fLX, inducedLZ := fLZ,
                obligations := switchObligations cert.kind })
 
+/-- Distance-strengthened switch check.  This is the FT-facing entry point: first
+    run the algebraic switch checker, then require the post-switch block to carry
+    a certified distance lower bound `>= requiredDistance`. -/
+def checkSwitchWithDistance
+    (Γ : TypedEnv) (b : BlockId) (D : TypedBlock) (cert : SwitchCert)
+    (requiredDistance : Nat) :
+    Except TypeError (TypedEnv × TypedSwitch × TypedDistanceEvidence) := do
+  let switched ← checkSwitch Γ b D cert
+  let distEv ← checkBlockDistance switched.1 b requiredDistance
+  return (switched.1, switched.2, distEv)
+
 /-- Validate a raw target code into a `TypedBlock`, reporting a TARGET-code error
     (`malformedTarget`) — never a source block id. -/
 def toTargetBlock? (D : Block) : Except TypeError TypedBlock :=
@@ -80,6 +92,15 @@ def checkSwitchFromEnv (Γ : Env) (b : BlockId) (D : Block) (cert : SwitchCert) 
   let tD ← toTargetBlock? D
   checkSwitch tΓ b tD cert
 
+/-- Raw entry point for distance-strengthened switches. -/
+def checkSwitchWithDistanceFromEnv
+    (Gamma : Env) (b : BlockId) (D : Block) (cert : SwitchCert)
+    (requiredDistance : Nat) :
+    Except TypeError (TypedEnv × TypedSwitch × TypedDistanceEvidence) := do
+  let tGamma ← TypedEnv.ofEnv? Gamma
+  let tD ← toTargetBlock? D
+  checkSwitchWithDistance tGamma b tD cert requiredDistance
+
 /-- A switch certificate whose map `f` is PROVEN to be `2·nC × 2·nD` (indexed by
     the source/target sizes).  Constructed only via `mkSwitchCert?`. -/
 structure CheckedSwitchCert (nC nD : Nat) where
@@ -91,5 +112,20 @@ def mkSwitchCert? (cert : SwitchCert) (nC nD : Nat) : Except TypeError (CheckedS
   if h : (decide (cert.f.length = 2 * nC) && cert.f.all (fun r => decide (r.length = 2 * nD))) = true then
     .ok ⟨cert, h⟩
   else .error (.shapeMismatch "switch certificate f must be 2·n_C × 2·n_D")
+
+def oneQDistanceSwitchCert : SwitchCert :=
+  { kind := .teleport, f := idMat 2 }
+
+example :
+    ok? (checkSwitchWithDistance oneQDistanceEnv 0
+      ⟨oneQWithDistance, by decide⟩ oneQDistanceSwitchCert 1) = true := by decide
+
+example :
+    ok? (checkSwitchWithDistance oneQDistanceEnv 0
+      ⟨oneQWithDistance, by decide⟩ oneQDistanceSwitchCert 2) = false := by decide
+
+example :
+    ok? (checkSwitchWithDistance oneQNoDistanceEnv 0
+      ⟨oneQNoDistance, by decide⟩ oneQDistanceSwitchCert 1) = false := by decide
 
 end TypeChecker

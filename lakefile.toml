@@ -1,6 +1,6 @@
 name = "LogicQ"
 version = "0.1.0"
-defaultTargets = ["LogicQ"]
+defaultTargets = ["LogicQ.Basic"]
 
 # LogicQ: a verified compilation pipeline (a "quantum CompCert") from a
 # chain-complex-typed fault-tolerant language down to a physical Clifford
@@ -21,11 +21,26 @@ version = "git#v4.29.1"
 
 [[lean_lib]]
 name = "LogicQ"
-# ROOT-CLEAN LAYOUT (M21): there are NO bare `.lean` files at the repo root.
-# Each top-level pipeline folder owns exactly one PUBLIC AGGREGATE `<Folder>/Basic.lean`
-# (e.g. `ChainQ/Basic.lean`); those folder-owned modules are the library roots, and
-# `LogicQ.Basic` is the full-pipeline umbrella (it imports every layer's `*.Basic`).
-# Canonical build: `lake build` (all roots) — or per-layer
-# `lake build LogicQ.Basic ChainQ.Basic TypeChecker.Basic Compiler.Basic`.
-roots = ["LogicQ.Basic", "Logical.Basic", "Physical.Basic", "ChainQ.Basic", "PPR.Basic", "PPM.Basic", "QStab.Basic", "QClifford.Basic", "TypeChecker.Basic", "Compiler.Basic"]
+# ROOT-CLEAN LAYOUT (M21): there are NO bare `.lean` files at the repo root; every
+# module lives under a top-level folder namespace (e.g. `ChainQ/Basic.lean`).
+#
+# BUILD HYGIENE (M23 fix): we GLOB each top-level namespace (`.*` = the namespace and
+# all descendants) instead of listing explicit `roots`.  With explicit `roots`, modules
+# that are only *imported* (not themselves roots) fell outside the library's module set,
+# so a cold `lake build` treated them as external/prebuilt and raced — failing with
+# "object file ... .olean ... does not exist".  Globbing puts every module in the set, so
+# Lake schedules the whole import graph in dependency order in ONE pass.
+#
+# NOTE on `lake clean`: in this workspace `lake clean` also evicts the Mathlib
+# dependency build, so the canonical cold reproduction is
+#   lake clean && lake exe cache get && lake build
+# (`lake exe cache get` re-fetches the precompiled Mathlib oleans; otherwise `lake
+# build` would recompile all of Mathlib from source).  The LogicQ modules themselves
+# build in one pass once Mathlib is cached.
+#
+# `LogicQ.Basic` remains the full-pipeline umbrella; every folder-owned `*.Basic`
+# aggregate is still a directly-buildable target (e.g.
+# `lake build Compiler.QStab2QClifford.Basic Compiler.Basic LogicQ.Basic`).
+roots = ["LogicQ.Basic"]
+globs = ["LogicQ.Basic", "Logical.*", "Physical.*", "ChainQ.*", "PPR.*", "PPM.*", "QStab.*", "QClifford.*", "TypeChecker.*", "Compiler.*", "MagicQ.*"]
 moreLeanArgs = ["-M", "8000"]

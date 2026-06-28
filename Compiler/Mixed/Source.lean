@@ -26,6 +26,14 @@ def LogicalOp.srcAction (Γ : TypedEnv) : LogicalOp → Option BoolMat
   | .sGate q => if singleLogicalBlock Γ q.blk then
                   (Γ.block? q.blk).map (fun tb => Internal.transversalMap tb.block.n sGate2x2) else none
   | .blockTransversal b g => (Γ.block? b).map (fun tb => Internal.transversalMap tb.block.n g)
+  | .transversalLogicalCNOT c t incidence =>
+      match Γ.block? c.blk, Γ.block? t.blk with
+      | some cTB, some tTB => some (Internal.cnotMap cTB.block.n tTB.block.n incidence)
+      | _, _ => none
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence _ =>
+      match Γ.block? controlBlock, Γ.block? targetBlock with
+      | some cTB, some tTB => some (Internal.cnotMap cTB.block.n tTB.block.n incidence)
+      | _, _ => none
   | _        => none
 
 -- (The LEGACY `compileOp_{h,s}Gate_transversal_sound` action lemmas were removed in
@@ -47,6 +55,20 @@ def srcOpOk (Γ : TypedEnv) (R : PPMState) : LogicalOp → Bool
   | .hGate q      => validLQubit Γ q && ! R.dead.hasBlock q.blk
   | .sGate q      => validLQubit Γ q && ! R.dead.hasBlock q.blk
   | .cnotGate c t => validLQubit Γ c && validLQubit Γ t && ! R.dead.hasBlock c.blk && ! R.dead.hasBlock t.blk
+  | .transversalLogicalCNOT c t incidence =>
+      validLQubit Γ c && validLQubit Γ t && ! (c == t) && ! (c.blk == t.blk) &&
+      ! R.dead.hasBlock c.blk && ! R.dead.hasBlock t.blk &&
+      match Γ.block? c.blk, Γ.block? t.blk with
+      | some cTB, some tTB => Internal.physicallyTransversalIncidence cTB.block.n tTB.block.n incidence
+      | _, _ => false
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      ! (controlBlock == targetBlock) &&
+      ! R.dead.hasBlock controlBlock && ! R.dead.hasBlock targetBlock &&
+      match Γ.block? controlBlock, Γ.block? targetBlock with
+      | some cTB, some tTB =>
+          Internal.logicalIncidenceWf cTB.block.lx.length tTB.block.lx.length logicalIncidence &&
+          Internal.physicallyTransversalIncidence cTB.block.n tTB.block.n incidence
+      | _, _ => false
   | .tGate q      => validLQubit Γ q && ! R.dead.hasBlock q.blk
   | .blockTransversal b g => (Γ.block? b).isSome && g.length == 2
                              && g.all (fun row => row.length == 2)   -- TRUE 2×2 shape (M17 task 2)
@@ -68,6 +90,9 @@ def progOpNext (R : PPMState) : LogicalOp → PPMState
 def sourceOpOk (caps : List Capability) (Γ : TypedEnv) (R : PPMState) : LogicalOp → Bool
   | .measure r P  => srcOpOk Γ R (.measure r P) && ok? (checkPPMProgram Γ caps (.meas r P))
   | .cnotGate c t => srcOpOk Γ R (.cnotGate c t) && (! (c == t))
+  | .transversalLogicalCNOT c t incidence => srcOpOk Γ R (.transversalLogicalCNOT c t incidence)
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      srcOpOk Γ R (.transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence)
   | .czGate c t   => srcOpOk Γ R (.czGate c t) && (! (c == t))   -- CZ ⟨q⟩⟨q⟩ rejected like CNOT (M17 task 2)
   | op            => srcOpOk Γ R op
 

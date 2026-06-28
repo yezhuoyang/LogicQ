@@ -91,6 +91,21 @@ def MTarget.wf (P : MTarget) : Bool :=
   let qs := P.map Prod.fst
   (P.length = 1 || P.length = 2) && qs.Nodup
 
+/-- The STRUCTURAL well-formedness of a measurement target, INDEPENDENT of weight:
+    no logical qubit appears twice.  (The other structural facts — nonempty,
+    in-range, live, a logical operator — are checked by `checkPPM` against the env.)
+    Split out of `MTarget.wf` so a capability-backed PPM can accept HIGH-WEIGHT targets
+    while native PPM stays 1- or 2-body. -/
+def MTarget.noDupQubits (P : MTarget) : Bool := (P.map Prod.fst).Nodup
+
+/-- The NATIVE-PPM arity restriction: a single- or two-qubit logical observable (the
+    natively lattice-surgery-realizable weight).  High-weight targets are admitted ONLY
+    through a capability whose merged-code certificate proves the target is measured. -/
+def MTarget.nativeArity (P : MTarget) : Bool := P.length = 1 || P.length = 2
+
+/-- `wf` is exactly the conjunction of the native arity restriction and structural no-dup. -/
+theorem MTarget.wf_eq (P : MTarget) : P.wf = (P.nativeArity && P.noDupQubits) := rfl
+
 /-! ## Example gadget programs (Litinski lattice-surgery forms).
 
     Convention: data logical qubits live in block `0`, ancilla logical qubits

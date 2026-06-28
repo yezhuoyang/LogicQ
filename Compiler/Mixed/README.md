@@ -1,39 +1,86 @@
 # Compiler/Mixed
 
-The implemented compiler target.
+> The Mixed IR — the implemented compiler target: a single logical-execution IR that interleaves native PPM fragments, direct transversal Cliffords, logical CNOTs, code switches, deferred magic obligations, and logical Paulis.
 
-## Syntax
+This is **Stage 4** of the LogicQ stack and the IR the front-end actually lowers into. Source `LogicalOp` programs (the small Lean DSL) are compiled here by the resource-aware `compile?` (see [Lower/](Lower/README.md)); each `MixedInstr` is type-checked against a `TypedEnv` (from the TypeChecker / ChainQ code families) and a threaded PPM resource state, and given an evidence-carrying small-step `Step` semantics. From here the wired edges go on to the simulator (`Compiler.Simulator`) and the `PPM → QStab → QClifford` extraction path toward the physical stabilizer target.
 
-```text
-MixedInstr ::= ppm Stmt
-             | transversal block gate2x2
-             | automorphism block symplecticMatrix
-             | switch block targetBlock cert
-             | magic obligation
-             | pauli logicalQubit PLetter
+## What's here
+
+| Module | Role |
+|---|---|
+| [Syntax.lean](Syntax.lean) | Pure data layer: `MagicObligation`, the `MixedInstr` instruction set, source `LogicalOp`, the `2×2` symplectic gate matrices, `MixedInstr.action`, `singleLogicalBlock` |
+| [Source.lean](Source.lean) | Source-level typing of `LogicalOp`: `srcAction`, `srcOpOk`, `progOpNext`, `sourceOpOk`, `sourceWellFormed` |
+| [Check.lean](Check.lean) | The mixed-IR checker `checkInstr` / `checkLogicalExec` (threads `TypedEnv` + `PPMState`), plus the `private` legacy M9 cost-driven selector |
+| [Semantics.lean](Semantics.lean) | The one shared evidence-carrying operational semantics: `MixedInterp`, `ExecState`, `Step` / `Steps`, per-instruction realization + progress lemmas, the `GadgetBoundary` tagging |
+| [Lower.lean](Lower.lean) | Aggregator that imports the `Mixed/Lower/` resource-aware compilation relation + public `compile?` (see [Lower/](Lower/README.md)) |
+
+## Key definitions
+
+```lean
+inductive MixedInstr
+  | ppm          (s : PPM.Stmt)                          -- a native PPM/PPU fragment
+  | transversal  (b : Nat) (g : BoolMat)                 -- a local single-qubit transversal gate
+  | transversalCNOT (spec : TransversalCNOTSpec)          -- an inter-block incidence-checked logical CNOT
+  | transversalCNOTBatch (spec : TransversalCNOTBatchSpec) -- a batched high-rate logical CNOT incidence
+  | automorphism (b : Nat) (M : BoolMat)                 -- an arbitrary symplectic logical automorphism
+  | switch       (b : Nat) (D : Block) (cert : SwitchCert)      -- a code switch (consumes/transforms b)
+  | magic        (ob : MagicObligation)                  -- a deferred, TYPED magic-state obligation (e.g. T)
+  | pauli        (q : LQubit) (p : PPM.PLetter)          -- a logical Pauli APPLIED to the carrier (M18: real op, not a frame record)
+  deriving Repr
 ```
 
-Source `LogicalOp` lives here too; it is the small Lean DSL compiled by
-`compile?`.
+`checkInstr` threads both the typed environment `Γ` and the PPM resource state `st`; `magic` type-checks as a deferred obligation but has no operational semantics:
 
-## Typechecking Rule
+```lean
+def checkInstr (caps : List Capability) :
+    TypedEnv → PPMState → MixedInstr → Except TypeError (TypedEnv × PPMState)
+```
 
-`checkInstr` threads a `TypedEnv` and `PPMState`.  It delegates to:
+`Step` is evidence-carrying — every rule has a `checkInstr … = .ok (Γ', R')` premise and steps to that checked `(Γ', R')`; there is no `magic` rule:
 
-- PPM program checker for `.ppm`
-- transversal and automorphism judgments for direct gates
-- switch checker for `.switch`
-- live/in-range checks for `.pauli`
-- no execution check for `.magic`, which is a typed obligation
+```lean
+inductive Step (I : MixedInterp Q) (caps : List Capability) :
+    MixedInstr → ExecState Q → ExecState Q → Prop
+```
 
-## Semantics
+```lean
+theorem Step_implies_checkInstr (I : MixedInterp Q) (caps : List Capability)
+    (instr : MixedInstr) (s s' : ExecState Q) (h : Step I caps instr s s') :
+    ∃ Γ' R', checkInstr caps s.env s.resource instr = .ok (Γ', R')
+```
 
-`Step` is evidence-carrying: each runtime step includes a proof that
-`checkInstr` accepted the instruction.  There is no `Step` rule for magic.
+```lean
+theorem no_step_magic (I : MixedInterp Q) (caps : List Capability) (ob : MagicObligation)
+    (s : ExecState Q) : ¬ ∃ s', Step I caps (.magic ob) s s'
+```
 
 ## Example
 
-`hGate q` lowers directly to `.transversal` only when the block has exactly one
-logical qubit.  Otherwise it must use a PPM gadget or fail.
+```lean
+-- SWITCH threads the environment (a genuine discriminator): encode the bare
+-- qubit (n=1) into the [[3,1,1]] code (n=3), then apply the IDENTITY automorphism
+-- `idMat 6` — a 2·3×2·3 map that is well-shaped ONLY for the n=3 post-switch block.
+-- It is legal AFTER the switch …
+example : ok? (checkLogicalExec [] tsrc
+    [.switch 0 repCode3 { kind := .gaugeFix, f := encF }, .automorphism 0 (idMat 6)]) = true := by decide
+-- … but the SAME automorphism is illegal WITHOUT the switch (block 0 is still n=1,
+-- so `idMat 6` is not 2n×2n) — proving the post-switch env was threaded through:
+example : ok? (checkLogicalExec [] tsrc [.automorphism 0 (idMat 6)]) = false := by decide
+```
 
-See [Lower](Lower/README.md) for the compiler path.
+These `by decide` tests show the checker threading the post-switch environment instruction-to-instruction: an automorphism legal only against the code produced by an earlier `switch`. Source: [Check.lean](Check.lean) (§5 executable tests).
+
+## Status & scope
+
+Honest scope, mirroring [`Compiler/CONTRACT.md`](../CONTRACT.md) tiers (**P** proved theorem, **D** `by decide` test, **A** documented assumption, **M** missing/planned):
+
+- **Proved (P).** The `MixedInstr` / `LogicalOp` data and the `checkInstr` / `checkLogicalExec` checker are total functions. The `Step` / `Steps` semantics is *evidence-carrying*: `Step_implies_checkInstr`, `no_step_of_checkInstr_error`, and `no_step_magic` make the checked interface gap-free, and the per-instruction realization + progress lemmas (`Step_transversal_realizes`, `Step_pauli_realizes`, `transversal_step_matches_action`, `Steps_append`, the `progress_*` family) hold over an arbitrary carrier `Q`. The soundness theorems are typically `propext`-clean, **not** "axiom-free."
+- **`by decide` instances (D).** The §5 tests in [Check.lean](Check.lean) exercise cost-driven selection, resource threading, use-after-discard across PPM fragments, and switch env-threading on concrete fixtures.
+- **Deferred / assumed (A).** `magic` (e.g. `T`) **only type-checks** — it has no `Step` rule (`compile? .executable` excludes it via `progNoMagic`); MagicQ is unwired. The direct fragment is given a *symplectic* (Heisenberg-picture) semantics, the right notion for the symplectic checker; full unitary-with-phase equivalence is deferred. The PPM gadget steps prove **frame-level** progress (control flow + classical store + Pauli frame) only — the carrier *channel* correctness (`QInterp.proj`) is **assumed ideal** (`GadgetBoundary.idealChannel`). `progCZAt` is an experimental placeholder gadget (CZ stays out of the exact-operational fragment).
+- **Not claimed here.** Fault tolerance, code distance, decoders, and the physical stabilizer channel are out of scope for this layer (see the contract matrix). `switch` preserves the logical state at the *ideal* level (a transparent coercion); the `SwitchCert` certificates are external/assumed.
+
+## See also
+
+- [Compiler/README.md](../README.md) — the compiler stack overview
+- [Compiler/CONTRACT.md](../CONTRACT.md) — the per-stage proved/deferred contract matrix
+- [Lower/README.md](Lower/README.md) — the resource-aware compilation relation + the public `compile?` (Source `LogicalOp` → Mixed IR)

@@ -17,6 +17,121 @@ open ChainQ.GF2
     for any `valid` CSS code). -/
 def CSSCode.k (c : CSSCode) : Nat := c.n - rank c.hx - rank c.hz
 
+/-! ## Homological logical representatives. -/
+
+/-- A CSS Z-support is a cycle iff it commutes with every X-check. -/
+def CSSCode.zCycle (c : CSSCode) (z : BoolVec) : Bool :=
+  decide (z.length = c.n) && c.hx.all (fun x => !dotBit x z)
+
+/-- A CSS Z-support is a boundary iff it is a product of Z-checks. -/
+def CSSCode.zBoundary (c : CSSCode) (z : BoolVec) : Bool := inSpan c.hz z
+
+/-- A nontrivial logical Z representative: a cycle in `ker Hx` that is not a
+    Z-stabilizer in `rowSpan Hz`. -/
+def CSSCode.logicalZ (c : CSSCode) (z : BoolVec) : Bool :=
+  c.valid && c.zCycle z && !c.zBoundary z
+
+/-- Preferred user-facing name for `logicalZ`: this checks a nonzero quotient-class
+    representative, not a chosen coordinate-basis operator. -/
+def CSSCode.isNontrivialZLogicalRep (c : CSSCode) (z : BoolVec) : Bool := c.logicalZ z
+
+/-- A CSS X-support is a cycle iff it commutes with every Z-check. -/
+def CSSCode.xCycle (c : CSSCode) (x : BoolVec) : Bool :=
+  decide (x.length = c.n) && c.hz.all (fun z => !dotBit x z)
+
+/-- A CSS X-support is a boundary iff it is a product of X-checks. -/
+def CSSCode.xBoundary (c : CSSCode) (x : BoolVec) : Bool := inSpan c.hx x
+
+/-- A nontrivial logical X representative: a cycle in `ker Hz` that is not an
+    X-stabilizer in `rowSpan Hx`. -/
+def CSSCode.logicalX (c : CSSCode) (x : BoolVec) : Bool :=
+  c.valid && c.xCycle x && !c.xBoundary x
+
+/-- Preferred user-facing name for `logicalX`: this checks a nonzero quotient-class
+    representative, not a chosen coordinate-basis operator. -/
+def CSSCode.isNontrivialXLogicalRep (c : CSSCode) (x : BoolVec) : Bool := c.logicalX x
+
+/-- A quotient-independence check: adjoining the representatives must increase
+    row-span rank by exactly their row count.  Shape is checked separately by
+    callers before this rank comparison is trusted. -/
+def independentModulo (stab rows : BoolMat) : Bool :=
+  decide (rank (stab ++ rows) = rank stab + rows.length)
+
+theorem independentModulo_iff_rank (stab rows : BoolMat) :
+    independentModulo stab rows = true ↔ rank (stab ++ rows) = rank stab + rows.length := by
+  unfold independentModulo
+  simp
+
+def CSSCode.logicalZBasisShapeAndCycle (c : CSSCode) (zs : BoolMat) : Bool :=
+  hasShape zs c.k c.n &&
+  zs.all (fun z => c.isNontrivialZLogicalRep z) &&
+  independentModulo c.hz zs
+
+def CSSCode.logicalXBasisShapeAndCycle (c : CSSCode) (xs : BoolMat) : Bool :=
+  hasShape xs c.k c.n &&
+  xs.all (fun x => c.isNontrivialXLogicalRep x) &&
+  independentModulo c.hx xs
+
+/-- Two Z-supports represent the same logical Z class iff their product differs
+    by a Z-stabilizer. -/
+def CSSCode.sameZLogicalClass (c : CSSCode) (z₁ z₂ : BoolVec) : Bool :=
+  decide (z₁.length = c.n) &&
+  decide (z₂.length = c.n) &&
+  inSpan c.hz (vecXor z₁ z₂)
+
+/-- Two X-supports represent the same logical X class iff their product differs
+    by an X-stabilizer. -/
+def CSSCode.sameXLogicalClass (c : CSSCode) (x₁ x₂ : BoolVec) : Bool :=
+  decide (x₁.length = c.n) &&
+  decide (x₂.length = c.n) &&
+  inSpan c.hx (vecXor x₁ x₂)
+
+private theorem notBool_true_eq_false (b : Bool) : (!b) = true ↔ b = false := by
+  cases b <;> simp
+
+private theorem notBool_true_iff_not (b : Bool) : (!b) = true ↔ ¬ b = true := by
+  cases b <;> simp
+
+theorem CSSCode.logicalZ_iff (c : CSSCode) (z : BoolVec) :
+    c.logicalZ z = true ↔
+      c.valid = true ∧
+      z.length = c.n ∧
+      (∀ x ∈ c.hx, dotBit x z = false) ∧
+      ¬ inSpan c.hz z := by
+  unfold CSSCode.logicalZ CSSCode.zCycle CSSCode.zBoundary
+  simp only [Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, Bool.not_eq_true]
+  constructor
+  · intro h
+    exact ⟨h.1.1, h.1.2.1, by
+      intro x hx
+      exact (notBool_true_eq_false (dotBit x z)).mp (h.1.2.2 x hx),
+      (notBool_true_eq_false (inSpan c.hz z)).mp h.2⟩
+  · intro h
+    exact ⟨⟨h.1, h.2.1, by
+      intro x hx
+      exact (notBool_true_eq_false (dotBit x z)).mpr (h.2.2.1 x hx)⟩,
+      (notBool_true_eq_false (inSpan c.hz z)).mpr h.2.2.2⟩
+
+theorem CSSCode.logicalX_iff (c : CSSCode) (x : BoolVec) :
+    c.logicalX x = true ↔
+      c.valid = true ∧
+      x.length = c.n ∧
+      (∀ z ∈ c.hz, dotBit x z = false) ∧
+      ¬ inSpan c.hx x := by
+  unfold CSSCode.logicalX CSSCode.xCycle CSSCode.xBoundary
+  simp only [Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, Bool.not_eq_true]
+  constructor
+  · intro h
+    exact ⟨h.1.1, h.1.2.1, by
+      intro z hz
+      exact (notBool_true_eq_false (dotBit x z)).mp (h.1.2.2 z hz),
+      (notBool_true_eq_false (inSpan c.hx x)).mp h.2⟩
+  · intro h
+    exact ⟨⟨h.1, h.2.1, by
+      intro z hz
+      exact (notBool_true_eq_false (dotBit x z)).mpr (h.2.2.1 z hz)⟩,
+      (notBool_true_eq_false (inSpan c.hx x)).mpr h.2.2.2⟩
+
 /-- A declared logical basis: `k` X-logicals and `k` Z-logicals, each a length-`n`
     bit support (an X-type resp. Z-type Pauli over the `n` physical qubits). -/
 structure CSSLogicalBasis where
@@ -37,9 +152,10 @@ structure CSSLogicalBasis where
 def CSSLogicalBasis.valid (c : CSSCode) (b : CSSLogicalBasis) : Bool :=
   c.valid &&
   hasShape b.lx c.k c.n && hasShape b.lz c.k c.n &&
-  orthogonal b.lx c.hz && orthogonal b.lz c.hx &&
-  b.lx.all (fun r => ! inSpan c.hx r) &&
-  b.lz.all (fun r => ! inSpan c.hz r) &&
+  b.lx.all (fun r => c.logicalX r) &&
+  b.lz.all (fun r => c.logicalZ r) &&
+  independentModulo c.hx b.lx &&
+  independentModulo c.hz b.lz &&
   decide (gemmT b.lx b.lz = identMat c.k)
 
 /-- **Derive** a canonical logical basis for a CSS code: X-logicals from
@@ -91,6 +207,10 @@ example : (toric 3).k = 2 := by decide
 def bareQubit : CSSCode := { n := 1, hx := [], hz := [] }
 
 example : bareQubit.k = 1 := by decide
+example : bareQubit.logicalZ [true] = true := by decide
+example : bareQubit.isNontrivialZLogicalRep [true] = true := by decide
+example : bareQubit.logicalX [true] = true := by decide
+example : bareQubit.isNontrivialXLogicalRep [true] = true := by decide
 example : (CSSLogicalBasis.mk [[true]] [[true]]).valid bareQubit = true := by decide
 -- wrong width (lx is 1×2, not 1×1) → rejected, not silently truncated:
 example : (CSSLogicalBasis.mk [[true, false]] [[true]]).valid bareQubit = false := by decide
@@ -101,6 +221,8 @@ example : (CSSLogicalBasis.mk [[true]] [[false]]).valid bareQubit = false := by 
 def xCheck2 : CSSCode := { n := 2, hx := [[true, true]], hz := [] }
 
 example : xCheck2.k = 1 := by decide
+example : xCheck2.logicalZ [true, true] = true := by decide
+example : xCheck2.logicalZ [true, false] = false := by decide
 example : (CSSLogicalBasis.mk [[true, false]] [[true, true]]).valid xCheck2 = true := by decide
 -- a "logical" that is actually a stabilizer (X̄ = XX ∈ span hx) → rejected:
 example : (CSSLogicalBasis.mk [[true, true]] [[true, true]]).valid xCheck2 = false := by decide
@@ -118,6 +240,7 @@ example : (deriveLogicalBasis? (toric 2)).isSome = true := by decide
 /-- An invalid code: `X` and `Z` on the same qubit anticommute (`Hx·Hzᵀ ≠ 0`). -/
 def badCode : CSSCode := { n := 2, hx := [[true, false]], hz := [[true, false]] }
 example : badCode.valid = false := by decide
+example : badCode.logicalZ [true, false] = false := by decide
 example : deriveLogicalBasis? badCode = none := by decide
 -- the empty basis is shape-OK but the CODE is invalid → rejected by the `c.valid` guard:
 example : (CSSLogicalBasis.mk [] []).valid badCode = false := by decide
@@ -125,6 +248,31 @@ example : (CSSLogicalBasis.mk [] []).valid badCode = false := by decide
 /-- A ragged code (an `hx` row of length 2 ≠ n = 3). -/
 def raggedCode : CSSCode := { n := 3, hx := [[true, true]], hz := [] }
 example : raggedCode.valid = false := by decide
+example : raggedCode.logicalZ [false, false, true] = false := by decide
 example : deriveLogicalBasis? raggedCode = none := by decide
+
+def badNonCommutingCSS : CSSCode := { n := 1, hx := [[true]], hz := [[true]] }
+example : badNonCommutingCSS.valid = false := by decide
+example : badNonCommutingCSS.logicalZ [true] = false := by decide
+
+def badRaggedCSS : CSSCode := { n := 2, hx := [[true]], hz := [] }
+example : badRaggedCSS.valid = false := by decide
+example : badRaggedCSS.logicalZ [false, true] = false := by decide
+
+/-! ## Quotient-independence regression tests. -/
+
+example : independentModulo [] [[false, false]] = false := by decide
+example : independentModulo [] [[true, false], [true, false]] = false := by decide
+example : independentModulo [] [[true, false], [false, true], [true, true]] = false := by decide
+example : independentModulo [[true, true]] [[true, false], [false, true]] = false := by decide
+example : independentModulo [[true, true]] [[true, false]] = true := by decide
+example : independentModulo [] [] = true := by decide
+example : independentModulo [[true, false], [true, false]] [[false, true]] = true := by decide
+example : independentModulo [[true, false]] [[true, false]] = false := by decide
+example : independentModulo [[true, true, false]] [[false, true, true]] = true := by decide
+example : independentModulo [[true, true, false]] [[false, true, true], [true, false, true]] = false := by decide
+def bareTwoForClassTests : CSSCode := { n := 2, hx := [], hz := [] }
+example : bareTwoForClassTests.sameZLogicalClass [true, false] [true, false] = true := by decide
+example : xCheck2.sameZLogicalClass [true, true] [false, false] = false := by decide
 
 end ChainQ

@@ -10,6 +10,7 @@
 import TypeChecker.Core.Symplectic
 import TypeChecker.Core.Error
 import TypeChecker.Core.Block
+import TypeChecker.Core.Distance
 import TypeChecker.Core.Elaborate
 import TypeChecker.Capability.Defs
 import TypeChecker.Judgment.Transversal

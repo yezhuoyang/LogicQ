@@ -2,7 +2,7 @@
   TypeChecker.Judgment.Transversal.Examples — worked, decidable examples for
   `checkLogicalAutomorphism` and `checkTransversal` over a TYPED environment.
 -/
-import TypeChecker.Judgment.Transversal.Check
+import TypeChecker.Judgment.Transversal.CNOT
 
 namespace TypeChecker
 open ChainQ ChainQ.GF2
@@ -66,5 +66,33 @@ example : ok? (checkTransversal toneQ 0 [[true, false], [false, false]]) = false
 -- a wrong-size gate (not 2×2) is rejected; an unknown block id is rejected.
 example : ok? (checkTransversal toneQ 0 (idMat 4)) = false := by decide
 example : ok? (checkTransversal toneQ 5 hGate) = false := by decide
+
+/-! ### `checkTransversalCNOT` (inter-block physical CNOT incidence). -/
+
+def ttwoQ : TypedEnv := ⟨[⟨oneQ, by decide⟩, ⟨oneQ, by decide⟩]⟩
+
+def bareCNOT01 : TransversalCNOTSpec :=
+  { control := ⟨0, 0⟩, target := ⟨1, 0⟩, incidence := [[true]] }
+
+-- The primitive requested by the source language: Transversal Logical CNOT q0 q1.
+example : ok? (checkTransversalCNOT ttwoQ bareCNOT01) = true := by decide
+example : (res? (checkTransversalCNOT ttwoQ bareCNOT01)).map (·.inducedLX)
+    = some [[true, true, false, false], [false, true, false, false]] := by decide
+example : (res? (checkTransversalCNOT ttwoQ bareCNOT01)).map (·.inducedLZ)
+    = some [[false, false, true, false], [false, false, true, true]] := by decide
+
+-- Same logical qubit / same block / zero incidence are rejected.
+example : ok? (checkTransversalCNOT ttwoQ
+    { control := ⟨0, 0⟩, target := ⟨0, 0⟩, incidence := [[true]] }) = false := by decide
+example : ok? (checkTransversalCNOT
+    ⟨[⟨{ n := 2, stab := [], lx := [[true, false, false, false], [false, true, false, false]],
+         lz := [[false, false, true, false], [false, false, false, true]] }, by decide⟩]⟩
+    { control := ⟨0, 0⟩, target := ⟨0, 1⟩, incidence := [[true, false], [false, true]] }) = false := by decide
+example : ok? (checkTransversalCNOT ttwoQ
+    { control := ⟨0, 0⟩, target := ⟨1, 0⟩, incidence := [[false]] }) = false := by decide
+
+-- Physical transversality is enforced: one control physical qubit cannot fan out
+-- to two target physical qubits in a single transversal layer.
+example : Internal.physicallyTransversalIncidence 1 2 [[true, true]] = false := by decide
 
 end TypeChecker

@@ -6,7 +6,7 @@
 *.ilean
 *.c.o
 /Library/
-
+/outputs/
 # Scratch
 /_design.json
 /_maps.json

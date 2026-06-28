@@ -3,13 +3,14 @@
 
   A QClifford circuit runs against a PHYSICAL state with a classical store of
   measured bits.  As with `PPM.Semantics`, the state is PARAMETRIC: a `Host St`
-  supplies the Clifford gate actions and a `Z`-basis measurement
+  supplies the Clifford/preparation actions and a `Z`-basis measurement
   (`measureZ : PQubit → St → Bool × St`).  Instantiate `St` with a stabilizer
   tableau (Mathlib-free) or a density matrix later; the control-flow law
   `run_append` below holds for any host.
 
   `run` threads `(state, store)`: gates transform the state, `meas` records its
-  outcome bit, and `ifPauli` applies a feed-forward Pauli conditioned on a bit.
+  outcome bit, `parity` records an XOR of existing bits, and `ifPauli` applies a
+  feed-forward Pauli conditioned on a bit.
 -/
 import QClifford.Syntax
 
@@ -23,9 +24,14 @@ def Store.empty : Store := fun _ => false
 /-- Set bit `r` to `b`. -/
 def Store.set (σ : Store) (r : CBit) (b : Bool) : Store :=
   fun x => if x = r then b else σ x
+/-- XOR a list of existing classical bits. -/
+def Store.xorOf (σ : Store) (srcs : List CBit) : Bool :=
+  srcs.foldl (fun b i => xor b (σ i)) false
 
 /-- A physical execution host: the Clifford gate actions and a `Z`-measurement. -/
 structure Host (St : Type) where
+  prepZero  : PQubit → St → St
+  prepPlus  : PQubit → St → St
   applyH    : PQubit → St → St
   applyS    : PQubit → St → St
   applyX    : PQubit → St → St
@@ -44,6 +50,8 @@ def applyPauli {St : Type} (Ho : Host St) : Pauli → PQubit → St → St
 /-- Run a circuit, threading the physical state and the classical store. -/
 def run {St : Type} (Ho : Host St) : Circuit → St → Store → St × Store
   | [],                  st, σ => (st, σ)
+  | .prepZero q :: t,    st, σ => run Ho t (Ho.prepZero q st) σ
+  | .prepPlus q :: t,    st, σ => run Ho t (Ho.prepPlus q st) σ
   | .H q :: t,           st, σ => run Ho t (Ho.applyH q st) σ
   | .S q :: t,           st, σ => run Ho t (Ho.applyS q st) σ
   | .X q :: t,           st, σ => run Ho t (Ho.applyX q st) σ
@@ -51,7 +59,9 @@ def run {St : Type} (Ho : Host St) : Circuit → St → Store → St × Store
   | .CNOT c d :: t,      st, σ => run Ho t (Ho.applyCNOT c d st) σ
   | .CZ a b :: t,        st, σ => run Ho t (Ho.applyCZ a b st) σ
   | .meas q r :: t,      st, σ =>
-      run Ho t (Ho.measureZ q st).2 (σ.set r (Ho.measureZ q st).1)
+      let m := Ho.measureZ q st
+      run Ho t m.2 (σ.set r m.1)
+  | .parity r srcs :: t, st, σ => run Ho t st (σ.set r (σ.xorOf srcs))
   | .ifPauli r p q :: t, st, σ =>
       run Ho t (if σ r then applyPauli Ho p q st else st) σ
 

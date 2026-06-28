@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 460" width="820" height="460" role="img" aria-label="Quantum hardware: dilution refrigerator and qubit chip">
+  <defs>
+    <linearGradient id="qh-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#111c33"/>
+    </linearGradient>
+    <linearGradient id="qh-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="qh-chip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <radialGradient id="qh-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="820" height="460" rx="18" fill="url(#qh-bg)"/>
+
+  <!-- ===== Dilution refrigerator "chandelier" (left) ===== -->
+  <g transform="translate(210,40)">
+    <!-- vertical support rods -->
+    <g stroke="#94a3b8" stroke-width="3">
+      <line x1="-90" y1="20" x2="-90" y2="320"/>
+      <line x1="0"   y1="20" x2="0"   y2="320"/>
+      <line x1="90"  y1="20" x2="90"  y2="320"/>
+    </g>
+    <!-- cooling stages (gold plates) -->
+    <g>
+      <rect x="-130" y="20"  width="260" height="20" rx="6" fill="url(#qh-gold)"/>
+      <rect x="-118" y="90"  width="236" height="18" rx="6" fill="url(#qh-gold)"/>
+      <rect x="-104" y="158" width="208" height="18" rx="6" fill="url(#qh-gold)"/>
+      <rect x="-86"  y="226" width="172" height="18" rx="6" fill="url(#qh-gold)"/>
+      <rect x="-64"  y="292" width="128" height="18" rx="6" fill="url(#qh-gold)"/>
+    </g>
+    <!-- temperature labels -->
+    <g font-family="'Segoe UI', Arial, sans-serif" font-size="11" fill="#cbd5e1">
+      <text x="140" y="34">50 K</text>
+      <text x="128" y="103">4 K</text>
+      <text x="114" y="171">800 mK</text>
+      <text x="96"  y="239">100 mK</text>
+      <text x="74"  y="305">10 mK</text>
+    </g>
+    <!-- coax / control lines threading down -->
+    <g stroke="#22d3ee" stroke-width="2" fill="none" opacity="0.8">
+      <path d="M-40,40 C -46,90 -34,140 -40,176"/>
+      <path d="M-14,40 C -20,90 -8,140 -14,176"/>
+      <path d="M14,40 C 8,90 20,140 14,176"/>
+      <path d="M40,40 C 34,90 46,140 40,176"/>
+    </g>
+    <g stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.85">
+      <path d="M-30,176 C -34,210 -28,250 -30,292"/>
+      <path d="M0,176 C -4,210 4,250 0,292"/>
+      <path d="M30,176 C 26,210 34,250 30,292"/>
+    </g>
+    <!-- mixing-chamber glow + chip mount -->
+    <ellipse cx="0" cy="330" rx="120" ry="26" fill="url(#qh-glow)"/>
+    <rect x="-40" y="310" width="80" height="26" rx="5" fill="#475569"/>
+  </g>
+
+  <!-- ===== Qubit chip / surface-code lattice (right) ===== -->
+  <g transform="translate(560,150)">
+    <rect x="-110" y="-110" width="220" height="220" rx="14" fill="url(#qh-chip)" stroke="#334155" stroke-width="2"/>
+    <!-- plaquettes: alternating X (cyan) and Z (violet) -->
+    <g opacity="0.35">
+      <rect x="-80" y="-80" width="40" height="40" fill="#22d3ee"/>
+      <rect x="0"   y="-80" width="40" height="40" fill="#22d3ee"/>
+      <rect x="-40" y="-80" width="40" height="40" fill="#6366f1"/>
+      <rect x="40"  y="-80" width="40" height="40" fill="#6366f1"/>
+      <rect x="-80" y="-40" width="40" height="40" fill="#6366f1"/>
+      <rect x="0"   y="-40" width="40" height="40" fill="#6366f1"/>
+      <rect x="-40" y="-40" width="40" height="40" fill="#22d3ee"/>
+      <rect x="40"  y="-40" width="40" height="40" fill="#22d3ee"/>
+      <rect x="-80" y="0"   width="40" height="40" fill="#22d3ee"/>
+      <rect x="0"   y="0"   width="40" height="40" fill="#22d3ee"/>
+      <rect x="-40" y="0"   width="40" height="40" fill="#6366f1"/>
+      <rect x="40"  y="0"   width="40" height="40" fill="#6366f1"/>
+      <rect x="-80" y="40"  width="40" height="40" fill="#6366f1"/>
+      <rect x="0"   y="40"  width="40" height="40" fill="#6366f1"/>
+      <rect x="-40" y="40"  width="40" height="40" fill="#22d3ee"/>
+      <rect x="40"  y="40"  width="40" height="40" fill="#22d3ee"/>
+    </g>
+    <!-- data qubits on the lattice vertices -->
+    <g fill="#e2e8f0">
+      <!-- 5x5 grid of dots -->
+      <g>
+        <circle cx="-80" cy="-80" r="5"/><circle cx="-40" cy="-80" r="5"/><circle cx="0" cy="-80" r="5"/><circle cx="40" cy="-80" r="5"/><circle cx="80" cy="-80" r="5"/>
+        <circle cx="-80" cy="-40" r="5"/><circle cx="-40" cy="-40" r="5"/><circle cx="0" cy="-40" r="5"/><circle cx="40" cy="-40" r="5"/><circle cx="80" cy="-40" r="5"/>
+        <circle cx="-80" cy="0" r="5"/><circle cx="-40" cy="0" r="5"/><circle cx="0" cy="0" r="5"/><circle cx="40" cy="0" r="5"/><circle cx="80" cy="0" r="5"/>
+        <circle cx="-80" cy="40" r="5"/><circle cx="-40" cy="40" r="5"/><circle cx="0" cy="40" r="5"/><circle cx="40" cy="40" r="5"/><circle cx="80" cy="40" r="5"/>
+        <circle cx="-80" cy="80" r="5"/><circle cx="-40" cy="80" r="5"/><circle cx="0" cy="80" r="5"/><circle cx="40" cy="80" r="5"/><circle cx="80" cy="80" r="5"/>
+      </g>
+    </g>
+    <text x="0" y="138" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="600" fill="#94a3b8">CSS / surface-code lattice</text>
+  </g>
+
+  <!-- signal flow arrow from fridge to chip -->
+  <g stroke="#22d3ee" stroke-width="3" fill="none" opacity="0.7">
+    <path d="M330,360 C 400,360 410,200 448,180" marker-end="url(#qh-arrow)"/>
+  </g>
+  <defs>
+    <marker id="qh-arrow" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#22d3ee"/>
+    </marker>
+  </defs>
+
+  <!-- title -->
+  <text x="30" y="40" font-family="'Segoe UI', Arial, sans-serif" font-size="16" font-weight="700" fill="#e2e8f0">Quantum hardware</text>
+  <text x="30" y="60" font-family="'Segoe UI', Arial, sans-serif" font-size="12" fill="#64748b">cryostat · control lines · error-corrected chip</text>
+</svg>

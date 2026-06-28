@@ -62,6 +62,124 @@ theorem checkTransversal_sound {Γ : TypedEnv} {b : BlockId} {g : BoolMat}
   split at h <;> first | contradiction | skip
   exact ⟨by simp_all, by simp_all⟩
 
+/-- **Soundness of `checkTransversalCNOT`**.  Acceptance of an incidence-certified
+    logical CNOT implies physical transversality, stabilizer preservation on the
+    product code, and the requested logical X/Z action modulo the product
+    stabilizer. -/
+theorem checkTransversalCNOT_sound {Γ : TypedEnv} {spec : TransversalCNOTSpec}
+    {e : TypedTransversalCNOT} {cTB tTB : TypedBlock}
+    (hc : Γ.block? spec.control.blk = some cTB)
+    (ht : Γ.block? spec.target.blk = some tTB)
+    (h : checkTransversalCNOT Γ spec = .ok e) :
+    Internal.physicallyTransversalIncidence cTB.block.n tTB.block.n spec.incidence = true ∧
+      (applyMap (cTB.block.n + tTB.block.n)
+        (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+        (Internal.jointStab cTB.block tTB.block)).all
+        (fun r => inSpan (Internal.jointStab cTB.block tTB.block) r) = true ∧
+      Internal.rowsEqualModStab (Internal.jointStab cTB.block tTB.block)
+        (applyMap (cTB.block.n + tTB.block.n)
+          (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+          (Internal.jointLX cTB.block tTB.block))
+        (Internal.expectedCNOTLX cTB.block tTB.block spec.control.idx spec.target.idx) = true ∧
+      Internal.rowsEqualModStab (Internal.jointStab cTB.block tTB.block)
+        (applyMap (cTB.block.n + tTB.block.n)
+          (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+          (Internal.jointLZ cTB.block tTB.block))
+        (Internal.expectedCNOTLZ cTB.block tTB.block spec.control.idx spec.target.idx) = true := by
+  unfold checkTransversalCNOT at h
+  simp only [hc, ht] at h
+  by_cases hsame : (spec.control == spec.target) = true
+  · simp [hsame] at h
+  · by_cases hblk : (spec.control.blk == spec.target.blk) = true
+    · simp [hsame, hblk] at h
+    · by_cases hclive : (!cTB.block.live) = true
+      · simp [hsame, hblk, hclive] at h
+      · simp at hclive
+        by_cases htlive : (!tTB.block.live) = true
+        · simp [hsame, hblk, hclive, htlive] at h
+        · simp at htlive
+          by_cases hcidx : decide (spec.control.idx < cTB.block.lx.length) = true
+          · by_cases htidx : decide (spec.target.idx < tTB.block.lx.length) = true
+            · by_cases hphys :
+                Internal.physicallyTransversalIncidence cTB.block.n tTB.block.n
+                    spec.incidence = true
+              · by_cases hsymp :
+                  preservesSymp (cTB.block.n + tTB.block.n)
+                      (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence) = true
+                · by_cases hstab :
+                    (applyMap (cTB.block.n + tTB.block.n)
+                      (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+                      (Internal.jointStab cTB.block tTB.block)).all
+                      (fun r => inSpan (Internal.jointStab cTB.block tTB.block) r) = true
+                  · by_cases hLX :
+                      Internal.rowsEqualModStab (Internal.jointStab cTB.block tTB.block)
+                        (applyMap (cTB.block.n + tTB.block.n)
+                          (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+                          (Internal.jointLX cTB.block tTB.block))
+                        (Internal.expectedCNOTLX cTB.block tTB.block spec.control.idx
+                          spec.target.idx) = true
+                    · by_cases hLZ :
+                        Internal.rowsEqualModStab (Internal.jointStab cTB.block tTB.block)
+                          (applyMap (cTB.block.n + tTB.block.n)
+                            (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+                            (Internal.jointLZ cTB.block tTB.block))
+                          (Internal.expectedCNOTLZ cTB.block tTB.block spec.control.idx
+                            spec.target.idx) = true
+                      · exact ⟨hphys, hstab, hLX, hLZ⟩
+                      · simp at hLZ
+                        simp [hsame, hblk, hclive, htlive, hcidx, htidx, hphys,
+                          hsymp, hstab, hLX, hLZ] at h
+                    · simp at hLX
+                      simp [hsame, hblk, hclive, htlive, hcidx, htidx, hphys,
+                        hsymp, hstab, hLX] at h
+                  · simp at hstab
+                    simp [hsame, hblk, hclive, htlive, hcidx, htidx, hphys,
+                      hsymp, hstab] at h
+                · simp at hsymp
+                  simp [hsame, hblk, hclive, htlive, hcidx, htidx, hphys, hsymp] at h
+              · simp at hphys
+                simp [hsame, hblk, hclive, htlive, hcidx, htidx, hphys] at h
+            · simp at htidx
+              simp [hsame, hblk, hclive, htlive, hcidx, htidx] at h
+          · simp at hcidx
+            simp [hsame, hblk, hclive, htlive, hcidx] at h
+
+/-- **Soundness of `checkTransversalCNOTBatch`**.  Acceptance of a batched
+    incidence-certified logical CNOT implies physical transversality, stabilizer
+    preservation on the product code, and the requested full logical CNOT
+    incidence on X/Z logical bases modulo the product stabilizer. -/
+theorem checkTransversalCNOTBatch_sound {Gamma : TypedEnv}
+    {spec : TransversalCNOTBatchSpec} {e : TypedTransversalCNOTBatch}
+    {cTB tTB : TypedBlock}
+    (hc : Gamma.block? spec.controlBlock = some cTB)
+    (ht : Gamma.block? spec.targetBlock = some tTB)
+    (h : checkTransversalCNOTBatch Gamma spec = .ok e) :
+    Internal.logicalIncidenceWf cTB.block.lx.length tTB.block.lx.length
+        spec.logicalIncidence = true ∧
+      Internal.physicallyTransversalIncidence cTB.block.n tTB.block.n
+        spec.incidence = true ∧
+      (applyMap (cTB.block.n + tTB.block.n)
+        (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+        (Internal.jointStab cTB.block tTB.block)).all
+        (fun r => inSpan (Internal.jointStab cTB.block tTB.block) r) = true ∧
+      Internal.rowsEqualModStab (Internal.jointStab cTB.block tTB.block)
+        (applyMap (cTB.block.n + tTB.block.n)
+          (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+          (Internal.jointLX cTB.block tTB.block))
+        (Internal.expectedCNOTBatchLX cTB.block tTB.block spec.logicalIncidence) = true ∧
+      Internal.rowsEqualModStab (Internal.jointStab cTB.block tTB.block)
+        (applyMap (cTB.block.n + tTB.block.n)
+          (Internal.cnotMap cTB.block.n tTB.block.n spec.incidence)
+          (Internal.jointLZ cTB.block tTB.block))
+        (Internal.expectedCNOTBatchLZ cTB.block tTB.block spec.logicalIncidence) = true := by
+  simp only [checkTransversalCNOTBatch, hc, ht] at h
+  repeat (split at h <;> first | contradiction | skip)
+  exact ⟨by simp_all (config := { maxSteps := 1000000 }),
+    by simp_all (config := { maxSteps := 1000000 }),
+    by simp_all (config := { maxSteps := 1000000 }),
+    by simp_all (config := { maxSteps := 1000000 }),
+    by simp_all (config := { maxSteps := 1000000 })⟩
+
 /-- **Soundness of `checkSwitch`** (over a typed env, typed target).  Acceptance
     implies the source was owned & live, and the certifying map `f` preserves the
     stabilizers and the logical basis (mod `S_D`) — a transparent logical coercion.
@@ -91,17 +209,19 @@ theorem checkPPM_nonempty {Γ : TypedEnv} {caps : List Capability} {P : PPM.MTar
   · exact absurd h (by simp)
   · rename_i hne; simpa using hne
 
-/-- **Merged-code soundness of `checkPPM`** (the cross-code capability branch).
-    If a multi-block PPM is accepted via capability `cap`, then the recomputed
-    merged stabilizer code (a) pairwise commutes — it is a valid code; (b) contains
-    every lifted data stabilizer — it preserves the data codes; and (c) measures
-    the target Pauli's representative.  This is the merged-code certificate, not
-    merely touched-block validity. -/
+/-- **Merged-code soundness of `checkPPM`** (the cross-code / HIGH-WEIGHT capability
+    branch).  If a PPM is accepted via capability `cap` (i.e. the NATIVE gate
+    `touched ≤ 1 ∧ nativeArity` is FALSE — a multi-block OR high-weight target), then the
+    recomputed merged stabilizer code (a) pairwise commutes — it is a valid code; (b)
+    contains every lifted data stabilizer — it preserves the data codes; and (c) measures
+    the target Pauli's representative.  This is the merged-code certificate, not merely
+    touched-block validity; it holds for ANY target weight (the proof never used `P.wf`),
+    so it now also covers high-weight (>2-body) GPPM/QGPU/high-rate targets. -/
 theorem checkPPM_merged_sound {Γ : TypedEnv} {caps : List Capability} {P : PPM.MTarget}
     {r : TypedPPM} {bos : List (BlockId × Block × Nat)} {dataN : Nat} {cap : Capability}
     (hg : gather Γ (dedupNat (P.map (fun f => f.1.blk))) = some (bos, dataN))
     (hcap : caps.find? (fun c => decide (c.blocks = dedupNat (P.map (fun f => f.1.blk)))) = some cap)
-    (hmulti : ¬ ((dedupNat (P.map (fun f => f.1.blk))).length ≤ 1))
+    (hbranch : ¬ ((decide ((dedupNat (P.map (fun f => f.1.blk))).length ≤ 1) && P.nativeArity) = true))
     (h : checkPPM Γ caps P = .ok r) :
     sympOrthogonal (dataN + cap.ancN) (mergedStabOf bos (dataN + cap.ancN) cap.connStab)
         (mergedStabOf bos (dataN + cap.ancN) cap.connStab) = true ∧
@@ -109,9 +229,20 @@ theorem checkPPM_merged_sound {Γ : TypedEnv} {caps : List Capability} {P : PPM.
         (fun row => inSpan (mergedStabOf bos (dataN + cap.ancN) cap.connStab) row) = true ∧
       inSpan (mergedStabOf bos (dataN + cap.ancN) cap.connStab) (targetPOf bos (dataN + cap.ancN) P) = true := by
   simp only [checkPPM, hg, hcap] at h
-  -- peel every guard: error branches die (`contradiction`, using `hmulti` for the
-  -- native `touched.length ≤ 1` case); only the capability-success branch survives.
+  -- peel every guard: error branches die (`contradiction`, using `hbranch` for the
+  -- native gate case); only the capability-success branch survives.
   repeat (split at h <;> first | contradiction | skip)
   refine ⟨of_guard_false ?_, of_guard_false ?_, of_guard_false ?_⟩ <;> assumption
+
+/-- **Structural no-dup soundness of `checkPPM`** (preserved across the weight refactor):
+    every accepted target has no repeated logical qubit, at ANY weight. -/
+theorem checkPPM_noDup {Γ : TypedEnv} {caps : List Capability} {P : PPM.MTarget}
+    {r : TypedPPM} (h : checkPPM Γ caps P = .ok r) : P.noDupQubits = true := by
+  simp only [checkPPM] at h
+  split at h
+  · exact absurd h (by simp)
+  · split at h
+    · exact absurd h (by simp)
+    · rename_i hnd; simpa using hnd
 
 end TypeChecker

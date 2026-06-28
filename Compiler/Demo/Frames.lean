@@ -75,12 +75,15 @@ example : runGates 1 [Gate.Z 0, Gate.H 0] (init 1) = runGates 1 [Gate.H 0, Gate.
     magic obligation). -/
 def exactSupportedOp : LogicalOp → Bool
   | .hGate _ | .sGate _ | .xGate _ | .zGate _ | .blockTransversal _ _ => true
+  | .transversalLogicalCNOT _ _ _ => true
+  | .transversalLogicalCNOTBatch _ _ _ _ => true
   | _ => false
 
 -- the §5 operational programs are all in the exact fragment:
 example : (xhSrc ++ zhSrc ++ xsSrc ++ djConstantSrc).all exactSupportedOp = true := by decide
 -- entangling / magic / measurement ops are NOT exact (typechecked / ideal / deferred):
 example : exactSupportedOp (.cnotGate ⟨0, 0⟩ ⟨1, 0⟩) = false := by decide
+example : exactSupportedOp (.transversalLogicalCNOT ⟨0, 0⟩ ⟨1, 0⟩ [[true]]) = true := by decide
 example : exactSupportedOp (.czGate ⟨0, 0⟩ ⟨1, 0⟩) = false := by decide   -- experimental placeholder gadget
 example : exactSupportedOp (.tGate ⟨0, 0⟩) = false := by decide           -- deferred magic
 example : exactSupportedOp (.measure 0 [(⟨0, 0⟩, PPM.PLetter.Z)]) = false := by decide  -- typechecked, ideal readout

@@ -13,12 +13,14 @@ open ChainQ.GF2 Logical PPM
 def checkPPMStmt (Γ : TypedEnv) (caps : List Capability) :
     PPMState → Stmt → Except TypeError PPMState
   | st, .meas r P =>
-      match (P.map Prod.fst).find? (fun q => st.dead.contains q) with
-      | some q => .error (.useAfterDiscard q.blk q.idx)   -- measures a discarded qubit
-      | none =>
-        match checkPPM Γ caps P with                      -- measurement must be legal
-        | .ok _    => .ok { st with bound := r :: st.bound }
-        | .error e => .error e
+      if st.bound.contains r then .error (.outcomeReused r)  -- SSA: the outcome var must be FRESH
+      else
+        match (P.map Prod.fst).find? (fun q => st.dead.contains q) with
+        | some q => .error (.useAfterDiscard q.blk q.idx)   -- measures a discarded qubit
+        | none =>
+          match checkPPM Γ caps P with                      -- measurement must be legal
+          | .ok _    => .ok { st with bound := r :: st.bound }
+          | .error e => .error e
   | st, .frame q _ =>
       if st.dead.contains q then .error (.useAfterDiscard q.blk q.idx)
       else if validLQubit Γ q then .ok st else .error (.badLogicalIndex q.blk q.idx)

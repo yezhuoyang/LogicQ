@@ -43,6 +43,7 @@ def opGate? (L : Layout) : LogicalOp → Option Gate
   | .hGate q      => some (.H (L q))
   | .sGate q      => some (.S (L q))
   | .cnotGate c t => some (.CNOT (L c) (L t))
+  | .transversalLogicalCNOT c t _ => some (.CNOT (L c) (L t))
   | .xGate q      => some (.X (L q))
   | .zGate q      => some (.Z (L q))
   | .czGate c t   => some (.CZ (L c) (L t))
@@ -65,6 +66,7 @@ def mixedInstrToGate? (L : Layout) : MixedInstr → Option Gate
   | .transversal b g =>
       if g == hGate2x2 then some (.H (L ⟨b, 0⟩))
       else if g == sGate2x2 then some (.S (L ⟨b, 0⟩)) else none
+  | .transversalCNOT spec => some (.CNOT (L spec.control) (L spec.target))
   | .pauli q p =>
       match p with
       | .X => some (.X (L q))
@@ -131,6 +133,7 @@ def simInterp (L : Layout) (n : Nat) : MixedInterp State where
     (a PPM gadget, automorphism, switch, or magic obligation). -/
 def execInstr (L : Layout) (n : Nat) : MixedInstr → State → Option State
   | .pauli q p, s        => some (simPauli L n p q s)
+  | .transversalCNOT spec, s => some (applyGate n (.CNOT (L spec.control) (L spec.target)) s)
   | .transversal b g, s  =>
       if g == hGate2x2 then some (applyGate n (.H (L ⟨b, 0⟩)) s)
       else if g == sGate2x2 then some (applyGate n (.S (L ⟨b, 0⟩)) s) else none

@@ -38,6 +38,16 @@ def checkInstr (caps : List Capability) :
       | some q => .error (.useAfterDiscard q.blk q.idx)
       | none =>
         match checkTransversal Γ b g with | .ok _ => .ok (Γ, st) | .error e => .error e
+  | Γ, st, .transversalCNOT spec =>
+      match st.dead.find? (fun q => (q.blk == spec.control.blk) || (q.blk == spec.target.blk)) with
+      | some q => .error (.useAfterDiscard q.blk q.idx)
+      | none =>
+        match checkTransversalCNOT Γ spec with | .ok _ => .ok (Γ, st) | .error e => .error e
+  | Gamma, st, .transversalCNOTBatch spec =>
+      match st.dead.find? (fun q => (q.blk == spec.controlBlock) || (q.blk == spec.targetBlock)) with
+      | some q => .error (.useAfterDiscard q.blk q.idx)
+      | none =>
+        match checkTransversalCNOTBatch Gamma spec with | .ok _ => .ok (Gamma, st) | .error e => .error e
   | Γ, st, .automorphism b M =>
       match st.dead.find? (fun q => q.blk == b) with
       | some q => .error (.useAfterDiscard q.blk q.idx)
@@ -92,6 +102,8 @@ def checkLogicalExec (caps : List Capability) (Γ : TypedEnv) (prog : LogicalExe
     transversal is never erased into a PPM gadget. -/
 private def cost : MixedInstr → Nat
   | .transversal _ _  => 1
+  | .transversalCNOT _ => 1
+  | .transversalCNOTBatch _ => 1
   | .pauli _ _        => 1
   | .automorphism _ _ => 2
   | .switch _ _ _     => 5
@@ -149,6 +161,18 @@ private def compileOp (caps : List Capability) (Γ : TypedEnv) (anc : LQubit) (r
       match checkPPMProgram Γ caps (progCNOTAt c t anc r₁ r₂ r₃) with   -- transversal CNOT deferred
       | .ok _    => .ok (.ppm (progCNOTAt c t anc r₁ r₂ r₃), Γ)
       | .error _ => .error (.notImplemented "CNOT: no PPM gadget (transversal CNOT deferred)")
+  | .transversalLogicalCNOT c t incidence =>
+      let spec : TransversalCNOTSpec := { control := c, target := t, incidence := incidence }
+      match checkInstr caps Γ PPMState.init (.transversalCNOT spec) with
+      | .ok (Γ', _) => .ok (.transversalCNOT spec, Γ')
+      | .error e    => .error e
+  | .transversalLogicalCNOTBatch controlBlock targetBlock incidence logicalIncidence =>
+      let spec : TransversalCNOTBatchSpec :=
+        { controlBlock := controlBlock, targetBlock := targetBlock,
+          incidence := incidence, logicalIncidence := logicalIncidence }
+      match checkInstr caps Γ PPMState.init (.transversalCNOTBatch spec) with
+      | .ok (Γ', _) => .ok (.transversalCNOTBatch spec, Γ')
+      | .error e    => .error e
   | .tGate _ => .error (.notImplemented "T (π/8): magic state required; MagicQ not wired")
   | .blockTransversal _ _ => .error (.notImplemented "blockTransversal: use the public compileOpR")
   | .xGate _ | .zGate _ | .czGate _ _ => .error (.notImplemented "X/Z/CZ: use the public compileOpR")

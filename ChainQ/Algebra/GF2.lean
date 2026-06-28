@@ -69,6 +69,11 @@ theorem zero_gemmT_iff_orthogonal (a b : BoolMat) :
 example : dotBit [true, false, true] [true, true, true] = false := by decide
 -- [1,0,0]·[1,1,1] = 1 (odd → non-orthogonal).
 example : dotBit [true, false, false] [true, true, true] = true := by decide
+example : dotBit [true] [true] = true := by decide
+example : dotBit [true, true] [true, true] = false := by decide
+example : dotBit [true, false, true] [true, true, false] = true := by decide
+example : transpose [[true, false, true], [false, true, false]] 3 =
+  [[true, false], [false, true], [true, false]] := by decide
 example : orthogonal [[true, true, true]] [[true, false, true]] = true := by decide
 example : isZeroMat (gemmT [[true, true, true]] [[true, false, true]]) = true := by decide
 

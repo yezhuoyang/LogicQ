@@ -1,37 +1,85 @@
-# PPR
+# PPR — Pauli-Product Rotations
 
-Pauli-product rotations over logical qubits.
+> The logical Pauli-product-rotation IR (level `L_PPR`): a program is a sequence of `exp(i φ P)` rotations over logical qubits.
 
-## Syntax
+A PPR program is a sequence of **logical** Pauli-product rotations `exp(i φ P)`, with the phase `φ` a signed dyadic fraction of π in Litinski's set `±{π, π/2, π/4, π/8}` and `P` a logical Pauli string. In the LogicQ stack PPR sits above [PPM](../PPM): it is the high-level "logical gates as rotations" view, and the `π/8` count (`RotProg.tCount`) is exactly the T-count the lowering to PPM must preserve. Everything here is at the logical level — there are no physical qubits in the syntax — and the denotational semantics fixes each rotation as a concrete monomial complex matrix under a qubit layout.
 
-```text
-PauliString ::= (LQubit -> X|Y|Z)*
-Angle       ::= pi | pi/2 | pi/4 | pi/8
-Phase       ::= +/- Angle
-Rot         ::= Phase * PauliString
-RotProg     ::= Rot*
+## What's here
+
+| Module | Role |
+| --- | --- |
+| [Basic.lean](Basic.lean) | Umbrella module; re-exports `Syntax` and `Semantics` |
+| [Syntax.lean](Syntax.lean) | Pure data: `Pauli`, `PauliString`, `Angle`, `Phase`, `Rot`, `RotProg`, well-formedness and T-count, worked-example gates (`rotT`/`rotS`/`rotZZ`) |
+| [Semantics.lean](Semantics.lean) | Mathlib denotation: dense-Pauli monomial matrices, `rotOf`/`Rot.denote`/`RotProg.denote`, and the composition law `denote_append` |
+
+## Key definitions
+
+```lean
+/-- A single-qubit Pauli (`I` is represented by the ABSENCE of a factor). -/
+inductive Pauli
+  | X | Y | Z
+  deriving DecidableEq, Repr, Inhabited
 ```
 
-`I` is represented by leaving a qubit out of the sparse Pauli string.
-
-## Semantics
-
-`Rot.denote` maps a rotation to:
-
-```text
-cos(phi) * I + i sin(phi) * P
+```lean
+/-- A **Pauli-product rotation** `exp(i φ P)` — the PPR primitive: a phase `φ`
+    together with the logical Pauli string `P` it rotates about. -/
+structure Rot where
+  phase : Phase
+  pauli : PauliString
+  deriving Repr, Inhabited
 ```
 
-`RotProg.denote` multiplies rotations left-to-right.  The theorem
-`denote_append` is the composition law.
+```lean
+/-- The **T-count** of a PPR program: the number of `π/8` rotations.  This is
+    the resource invariant the lowering to PPM must preserve. -/
+def RotProg.tCount (p : RotProg) : Nat := (p.filter Rot.isT).length
+```
 
-## Typechecking Rule
+```lean
+/-- `rotOf φ M = cos φ · 1 + (i · sin φ) · M` — the rotation `exp(i φ P)` for an
+    involutive `M = axisMat P`. -/
+noncomputable def rotOf {n : Nat} (φ : ℝ) (M : Matrix (BitStr n) (BitStr n) ℂ) :
+    Matrix (BitStr n) (BitStr n) ℂ :=
+  (↑(Real.cos φ) : ℂ) • (1 : Matrix (BitStr n) (BitStr n) ℂ)
+    + (Complex.I * ↑(Real.sin φ)) • M
+```
 
-`RotProg.wf` checks that each Pauli string mentions a logical qubit at most once.
+```lean
+/-- **Composition law.**  The unitary of a concatenated program is the product
+    of the parts, in reverse order (later rotations act on the left). -/
+theorem denote_append (n : Nat) (lay : LQubit → Fin n) (p q : RotProg) :
+    RotProg.denote n lay (p ++ q)
+      = RotProg.denote n lay q * RotProg.denote n lay p
+```
 
 ## Example
 
 ```lean
-PPR.rotT { blk := 0, idx := 0 }      -- +pi/8 about Z
-PPR.rotZZ q0 q1      -- +pi/8 about Z tensor Z
+/-- A logical **T** on `q`: the `+π/8` Z-rotation `exp(i π/8 Z)`. -/
+def rotT (q : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q, .Z)]⟩
+/-- A logical **S** on `q`: the `+π/4` Z-rotation. -/
+def rotS (q : LQubit) : Rot := ⟨⟨false, .piQuarter⟩, [(q, .Z)]⟩
+/-- A two-qubit logical `π/8` rotation about `Z⊗Z` over the set `{q₁, q₂}`. -/
+def rotZZ (q₁ q₂ : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q₁, .Z), (q₂, .Z)]⟩
+
+-- The π/8 rotations are exactly the T-count: two of the three below.
+example : RotProg.tCount [rotT ⟨0, 0⟩, rotS ⟨0, 0⟩, rotZZ ⟨0, 0⟩ ⟨0, 1⟩] = 2 := by decide
+example : RotProg.wf [rotT ⟨0, 0⟩, rotS ⟨0, 0⟩, rotZZ ⟨0, 0⟩ ⟨0, 1⟩] = true := by decide
 ```
+
+Logical T/S/`ZZ` gates built as concrete `Rot` values, with `by decide` checks that the T-count counts exactly the `π/8` rotations and the program is well-formed (each axis names a logical qubit at most once). Source: [Syntax.lean](Syntax.lean) (lines 104–117).
+
+## Status & scope
+
+- **Proved (P).** The semantic laws in [Semantics.lean](Semantics.lean) are real Mathlib theorems: `rotOf_zero`, `denote_nil`, `denote_singleton`, the monoid helper `foldl_mul_one`, and the composition law `denote_append` (running `p` then `q` denotes `denote q * denote p`).
+- **Decided (D).** The worked-example facts in [Syntax.lean](Syntax.lean) (`isT`, `support`, `wf`, `tCount`) are `by decide` tests on concrete programs.
+- **Assumed / modeled (A).** The denotation is an ideal-channel, noiseless unitary model: `rotOf` uses the involutive closed form `cos φ · 1 + i sin φ · M`, and `axisMat` is a layout-parameterized monomial matrix (no tensor/Kronecker machinery). The logical→physical layout `lay : LQubit → Fin n` is a free parameter; it is **not** verified that `axisMat (denseOf …)` is involutive, nor that `rotOf` equals a true matrix exponential — these are taken as the operational meaning of a rotation.
+- **Missing / planned (M).** No lowering from PPR into PPM is defined in this folder, so the stated T-count preservation invariant is **documented intent, not a proved theorem** here. No fault-tolerance, distance, decoder, or operational-equivalence claims are made.
+
+This module is `Mathlib`-pinned (same Mathlib as FormalRV) in `Semantics.lean`; `Syntax.lean` is Mathlib-free pure data.
+
+## See also
+
+- [Repository README](../README.md) — the full LogicQ verified-compiler stack
+- [PPM](../PPM) — the Pauli-product-measurement layer that PPR lowers into

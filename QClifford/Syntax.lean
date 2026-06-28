@@ -1,9 +1,10 @@
 /-
   QClifford.Syntax — the final target IR (level L_QClifford).
 
-  A QClifford program is a circuit of PHYSICAL Clifford gates, computational
-  (`Z`-basis) measurements, and classically-conditioned Pauli corrections — the
-  executable artifact a surface-code device runs.
+  A QClifford program is a circuit of PHYSICAL Clifford gates, state
+  preparations, computational (`Z`-basis) measurements, classical parity
+  assignments, and classically-conditioned Pauli corrections — the executable
+  artifact a surface-code device runs.
 
   PHYSICAL LEVEL: gates act on physical qubits; measurements bind classical
   bits; `ifPauli` applies a feed-forward Pauli conditioned on a measured bit.
@@ -12,9 +13,11 @@
 
   Standard-PL BNF:
 
-    Gate ::= 'H' q | 'S' q | 'X' q | 'Z' q
+    Gate ::= 'Prep0' q | 'Prep+' q
+           | 'H' q | 'S' q | 'X' q | 'Z' q
            | 'CNOT' c t | 'CZ' a b
            | 'Meas' q '->' CBit                 -- Z-basis measurement
+           | CBit ':=' 'xor' CBit*               -- classical parity
            | 'If' CBit 'then' Pauli q           -- classically-conditioned Pauli
     Circuit ::= Gate*
 -/
@@ -28,6 +31,8 @@ abbrev CBit := Nat
 
 /-- A physical Clifford+measurement gate. -/
 inductive Gate
+  | prepZero (q : PQubit)
+  | prepPlus (q : PQubit)
   | H       (q : PQubit)
   | S       (q : PQubit)
   | X       (q : PQubit)
@@ -35,18 +40,20 @@ inductive Gate
   | CNOT    (c t : PQubit)
   | CZ      (a b : PQubit)
   | meas    (q : PQubit) (r : CBit)              -- `Meas q -> r`
+  | parity  (r : CBit) (srcs : List CBit)        -- `r := xor srcs`
   | ifPauli (r : CBit) (p : Pauli) (q : PQubit)  -- `If r then P q`
-  deriving Repr, Inhabited
+  deriving DecidableEq, Repr, Inhabited
 
 /-- A QClifford circuit. -/
 abbrev Circuit := List Gate
 
 /-- The physical qubits a gate touches. -/
 def Gate.qubits : Gate → List PQubit
-  | .H q | .S q | .X q | .Z q => [q]
+  | .prepZero q | .prepPlus q | .H q | .S q | .X q | .Z q => [q]
   | .CNOT c t => [c, t]
   | .CZ a b   => [a, b]
   | .meas q _ => [q]
+  | .parity _ _ => []
   | .ifPauli _ _ q => [q]
 
 /-- Whether a gate is a two-qubit gate (`CNOT`/`CZ`). -/
@@ -59,6 +66,11 @@ def Gate.isMeas : Gate → Bool
   | .meas .. => true
   | _        => false
 
+/-- Whether a gate is a purely classical assignment. -/
+def Gate.isClassical : Gate → Bool
+  | .parity .. => true
+  | _          => false
+
 /-! ## Resource readouts (honest counts on exactly this circuit). -/
 
 /-- Number of physical qubits touched (max index + 1). -/
@@ -70,6 +82,8 @@ def Circuit.gateCount (c : Circuit) : Nat := c.length
 def Circuit.twoQubitCount (c : Circuit) : Nat := (c.filter Gate.isTwoQubit).length
 /-- Number of measurements. -/
 def Circuit.measCount (c : Circuit) : Nat := (c.filter Gate.isMeas).length
+/-- Number of classical parity assignments. -/
+def Circuit.parityCount (c : Circuit) : Nat := (c.filter Gate.isClassical).length
 
 /-! ## Example. -/
 

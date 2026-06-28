@@ -1,29 +1,76 @@
-# ChainQ/LiftedProduct
+# ChainQ / LiftedProduct
 
-Lifted-product code constructor.
+> Lifted-product CSS code constructor over the circulant ring `F₂[x]/(xˡ−1)`.
 
-## Syntax
+This folder is one of the ChainQ front-end code families. It turns a ring matrix `A`
+(a matrix of circulant-polynomial exponent lists) into a concrete `CSSCode` via the
+lifted-product construction (Panteleev–Kalachev, [arXiv 2012.04068](https://arxiv.org/abs/2012.04068)).
+It sits at the very front of the LogicQ stack: families like this materialize concrete
+GF(2) `hx`/`hz` matrices that downstream layers (TypeChecker legality → Compiler Mixed IR
+→ QStab/QClifford physical target) consume.
+
+## What's here
+
+| Module | Role |
+| --- | --- |
+| [Basic.lean](Basic.lean) | Raw (shape-unchecked) `Internal.liftedProduct`, plus the `Option`-returning `liftedProduct?` checked variant; dimension / CSS-condition `by decide` tests. |
+| [Checked.lean](Checked.lean) | `mkLiftedProduct`, the `Except ChainQError CheckedCSSCode` constructor that reports shape errors, plus its `isOk` accept test. |
+
+## Key definitions
 
 ```lean
-Internal.liftedProduct ell A rA nA
-liftedProduct? ell A rA nA
-mkLiftedProduct ell A rA nA
+def liftedProduct (l : Nat) (A : List (List Circ)) (rA nA : Nat) : CSSCode :=
+  let Ad := pDagger l A
+  let pHx := pHcat (pKron l A (pIdent nA)) (pKron l (pIdent rA) Ad)
+  let pHz := pHcat (pKron l (pIdent nA) A) (pKron l Ad (pIdent rA))
+  { n  := (rA * rA + nA * nA) * l,
+    hx := liftMat l pHx,
+    hz := liftMat l pHz }
 ```
 
-`A` is a matrix of circulant-polynomial exponent lists.
+```lean
+def liftedProduct? (l : Nat) (A : List (List Circ)) (rA nA : Nat) : Option CSSCode
+```
 
-## Semantics
+```lean
+def mkLiftedProduct (l : Nat) (A : List (List Circ)) (rA nA : Nat) :
+    Except ChainQError CheckedCSSCode
+```
 
-The constructor expands the ring-polynomial data into concrete GF(2) matrices.
-The generated code has `n = (rA^2 + nA^2) * ell`.
-
-## Typechecking Rule
-
-Checked constructors reject shape disagreements such as `rA != A.length` and
-then validate the CSS condition.
+`Internal.liftedProduct` is the raw builder: `hx = lift[A⊗I | I⊗A*]`, `hz = lift[I⊗A | A*⊗I]`,
+with `n = (rA²+nA²)·ℓ`. `liftedProduct?` returns `none` unless `ℓ ≥ 1` and `A` actually has the
+declared `rA × nA` shape; `mkLiftedProduct` reports the specific failure as `degenerateParam`
+or `badDimension`.
 
 ## Example
 
 ```lean
-mkLiftedProduct 2 [[[0],[1]]] 1 2
+-- Lifted product tiny: ℓ=3, A = [1, x] (1×2 ring matrix), n = (1+4)·3 = 15.
+example : (Internal.liftedProduct 3 [[[0], [1]]] 1 2).n = 15 := by decide
+example : (Internal.liftedProduct 3 [[[0], [1]]] 1 2).cssCondition = true := by decide
 ```
+
+A `1×2` ring matrix `A = [1, x]` at `ℓ = 3` yields a 15-qubit CSS code whose
+`hx · hzᵀ = 0` (the CSS condition) holds, checked by `decide`. Source:
+[Basic.lean](Basic.lean) (lines 31–33).
+
+## Status & scope
+
+- The `by decide` lines (`.n = 15`, `.cssCondition = true`, `liftedProduct?`/`mkLiftedProduct`
+  accept/reject) are D-tier executable tests in the CONTRACT sense — they confirm the
+  construction computes the declared dimensions and satisfies the CSS condition on the cited
+  example inputs only. They are concrete checks, not general theorems over all `A`, `ℓ`.
+- The doc-comment claim that `hx·hzᵀ = 0` "because `transpose (lift A*) = lift A`" is stated as
+  the construction's design rationale; no general parametric proof of `cssCondition = true` for
+  arbitrary lifted-product inputs is provided in this folder.
+- Shape checking is real and executable: `liftedProduct?` / `mkLiftedProduct` reject `ℓ = 0` and
+  any `A` not matching the declared `rA × nA` shape.
+- Out of scope here (consistent with the rest of LogicQ): code distance, decoder correctness,
+  fault-tolerance, and operational/channel claims. These are not asserted or proved in this folder.
+
+## See also
+
+- [../README.md](../README.md) — ChainQ front-end code type system and sibling families.
+- [../Checked/README.md](../Checked/README.md) — the `CheckedCSSCode` / `ChainQError` machinery
+  that `mkLiftedProduct` returns into.
+- [../../README.md](../../README.md) — LogicQ repository root.

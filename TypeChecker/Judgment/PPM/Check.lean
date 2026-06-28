@@ -24,9 +24,11 @@ def ppmObligations : CapKind → List String
 def checkPPM (Γ : TypedEnv) (caps : List Capability) (P : PPM.MTarget) :
     Except TypeError TypedPPM :=
   if P.isEmpty then .error .emptyMeasurement
-  -- STRICT QMeas: the native lattice-surgery alphabet is 1- or 2-qubit logical
-  -- Pauli observables with no repeated logical qubit (`PPM.MTarget.wf`).
-  else if !P.wf then .error .nonNativeMeasurement else
+  -- STRUCTURAL: no repeated logical qubit (the weight-independent part of the old
+  -- `MTarget.wf`).  The native 1-/2-body ARITY cap is now applied ONLY in the native
+  -- branch below, so a HIGH-WEIGHT target can still reach the capability path and be
+  -- admitted IFF a merged-code certificate proves it is measured.
+  else if !P.noDupQubits then .error .nonNativeMeasurement else
   let touched := dedupNat (P.map (fun f => f.1.blk))
   match gather Γ touched with
   | none => .error (.badBlock 0)
@@ -49,8 +51,8 @@ def checkPPM (Γ : TypedEnv) (caps : List Capability) (P : PPM.MTarget) :
         (fun acc f => vecXor acc (factorRepD blk f.1.idx f.2)) (zeros (2 * blk.n))
     if !(bos.all (fun t => commutesAllSt t.2.1.n t.2.1.stab (restrictOf t.1 t.2.1))) then
       .error .notLogicalOp
-    else if touched.length ≤ 1 then
-      -- a native single-code logical measurement
+    else if decide (touched.length ≤ 1) && P.nativeArity then
+      -- a NATIVE single-code logical measurement: one block, weight 1 or 2
       .ok { target := P, kind := .nativeSurgery, mergedN := dataN,
             obligations := ["fault-tolerant syndrome extraction"] }
     else
