@@ -82,32 +82,32 @@ def productSurgeryObligations : List String :=
    "fault distance / R ≥ d measurement rounds (DEFERRED)",
    "soundness ρ of the connection complex (DEFERRED)"]
 
-/-- **BLOCKER (Concern 4 — NOT a soundness escape, an honest gap).**  A `CheckedProductSurgery`
-    binds the cert's `hX`/`hZ` to ONE ANOTHER (data code is CSS) and to the MERGED code, but it
-    does NOT bind them to any ADDRESSED ChainQ/`TypedEnv` block — the data matrices are still
-    free-standing.  So a `CheckedProductSurgery` proves "this is a coherent product surgery on
-    SOME CSS code", NOT "this is the product surgery on the logical QEC block at `blockId`".
+/-! ## §PS.2b. CSS extraction from a symplectic block (Task A foundation).
 
-    What is required (the next hard milestone), and is deliberately NOT faked here:
-      * `def blockIsCSS (stab : BoolMat) (n : Nat) : Bool` — every symplectic row is pure-X
-        (z-half zero) or pure-Z (x-half zero).
-      * `def extractHX / extractHZ (stab : BoolMat) (n : Nat) : BoolMat` — the X-half of the
-        pure-X rows / the Z-half of the pure-Z rows (the CSS normalization of `Block.stab`).
-      * `structure CheckedProductSurgeryFor (Γ : TypedEnv) (blockId : Nat)` carrying a
-        `base : CheckedProductSurgery` PLUS proofs `Γ.block? blockId = some tb`,
-        `blockIsCSS tb.block.stab tb.block.n = true`,
-        `base.cert.hX = extractHX tb.block.stab tb.block.n`,
-        `base.cert.hZ = extractHZ tb.block.stab tb.block.n`.
-      * a smart constructor `checkProductSurgeryFor? Γ blockId c maxMerge` that resolves the
-        block, checks CSS, extracts, and REJECTS a cert with correct dimensions but matrices not
-        matching the addressed block; tests: correct cert accepted / wrong block rejected /
-        dimension-correct wrong matrices rejected.
+    CONVENTION (pinned to `TypeChecker.Core.Symplectic` + `ChainQ.Materialize`): a width-`2n`
+    symplectic stabilizer row is `(X-part ++ Z-part)` — the FIRST `n` entries are the X-support
+    (`row.take n`), the LAST `n` are the Z-support (`row.drop n`).  `cssToStab` materializes an
+    X-check `r` as `(r | 0)` and a Z-check `r` as `(0 | r)`.  So the inverse split is: a row is
+    pure-X iff its Z-half is all zero, pure-Z iff its X-half is all zero; `H_X` = the X-halves of
+    the pure-X rows, `H_Z` = the Z-halves of the pure-Z rows. -/
 
-    This is the SINGLE remaining gap for product-surgery "acts on THIS logical block" soundness.
-    It needs the symplectic→CSS split convention pinned down exactly (which n-half is X vs Z),
-    so it is recorded as a precise blocker rather than rushed with a fragile convention. -/
-def checkedProductSurgeryForBlocker : List String :=
-  ["CheckedProductSurgeryFor Γ blockId: bind cert.hX/hZ to extractHX/extractHZ of the addressed block's symplectic Block.stab (block-identity binding) — NOT built"]
+/-- A symplectic row's Z-half (`row.drop n`) is all zero — a pure-X (or trivial) stabilizer. -/
+def rowIsPureX (n : Nat) (row : BoolVec) : Bool := (row.drop n).all (fun b => !b)
+/-- A symplectic row's X-half (`row.take n`) is all zero — a pure-Z (or trivial) stabilizer. -/
+def rowIsPureZ (n : Nat) (row : BoolVec) : Bool := (row.take n).all (fun b => !b)
+
+/-- A symplectic stabilizer matrix is CSS iff every row has width `2n` and is pure-X or pure-Z
+    (a Y-type / mixed row makes the code non-CSS and is REJECTED). -/
+def blockStabIsCSS (n : Nat) (stab : BoolMat) : Bool :=
+  stab.all (fun row => decide (row.length = 2 * n) && (rowIsPureX n row || rowIsPureZ n row))
+
+/-- Extract `H_X` (width `n`): the X-halves (`take n`) of the pure-X rows. -/
+def extractHX (n : Nat) (stab : BoolMat) : BoolMat :=
+  (stab.filter (rowIsPureX n)).map (fun row => row.take n)
+
+/-- Extract `H_Z` (width `n`): the Z-halves (`drop n`) of the pure-Z rows. -/
+def extractHZ (n : Nat) (stab : BoolMat) : BoolMat :=
+  (stab.filter (rowIsPureZ n)).map (fun row => row.drop n)
 
 /-- **Check a product-surgery certificate.**  Recomputes: shape; the data code is CSS;
     the MERGED checks commute (the surgery square — the CSS condition for the merged code);

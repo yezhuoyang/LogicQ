@@ -190,6 +190,53 @@ def compileSynthTransversalQStab (Gamma : TypedEnv) (caps : List Capability) (L 
       "transversal g is not a synthesizable single-qubit H/S Clifford (or the block has no layout); supply a chunk witness")
   | some chunk => compileAndVerifyChunkedMixedProgQStab Gamma caps L [.transversal b g] [chunk] mode
 
+/-! ## §3d. Unified program compiler: structural first, then single-qubit H/S synthesis. -/
+
+/-- Build the QStab chunk for ONE instruction: a `.transversal` is SYNTHESIZED (single-qubit
+    H/S Cliffords only — `synthTransversalChunk?`, which also covers H/S); everything else
+    structural (`directMixedQStabLowering`: CNOT/batch/`.pauli`/straight-line PPM); a general
+    `.automorphism`, a non-synthesizable transversal, or a deferred instruction
+    (switch/magic/control-PPM) is an explicit error (no fake artifact).  Type checking and
+    semantic verification happen later, in the chunked verifier. -/
+def buildMixedChunk? (Gamma : TypedEnv) (caps : List Capability) (L : PhysLayout) :
+    MixedInstr → Except VerificationError MixedQStabChunk
+  | .transversal b g =>
+      match synthTransversalChunk? L b g with
+      | some chunk => .ok chunk
+      | none => .error (.unsupportedMixed
+          "transversal g is not a synthesizable single-qubit H/S Clifford; supply a chunk witness")
+  | .automorphism _ _ => .error (.unsupportedMixed "automorphism requires a supplied chunk witness (no synthesis yet)")
+  | instr =>
+      match directMixedQStabLowering Gamma caps L instr with
+      | .ok art  => .ok { instr := instr, artifact := art }
+      | .error e => .error e
+
+/-- Build chunks for a whole program (fails on the first unsupported instruction). -/
+def buildMixedChunks? (Gamma : TypedEnv) (caps : List Capability) (L : PhysLayout) :
+    LogicalExec → Except VerificationError (List MixedQStabChunk)
+  | []        => .ok []
+  | i :: rest =>
+      match buildMixedChunk? Gamma caps L i with
+      | .error e => .error e
+      | .ok c =>
+        match buildMixedChunks? Gamma caps L rest with
+        | .error e => .error e
+        | .ok cs => .ok (c :: cs)
+
+/-- **The unified public compiler.**  Compile a whole MixedIR program to QStab: structural
+    instructions are synthesized directly, single-qubit H/S `.transversal`s are synthesized,
+    and everything else (general `.automorphism`, `.switch`, magic, non-straight-line PPM,
+    external protocols) is an explicit unsupported/witness-required error.  The result is
+    returned ONLY after passing the verifier (it routes through
+    `compileAndVerifyChunkedMixedProgQStab` → `verifyChunkedMixedProgQStab`), so no QStab is
+    emitted without verification, and `.prop` stays measurement-only. -/
+def compileAndVerifyMixedProgQStab (Gamma : TypedEnv) (caps : List Capability) (L : PhysLayout)
+    (prog : LogicalExec) (mode : CliffordCheck := .symplectic) (spec : QStabVerificationSpec := {}) :
+    Except VerificationError StabilizerProg :=
+  match buildMixedChunks? Gamma caps L prog with
+  | .error e  => .error e
+  | .ok chunks => compileAndVerifyChunkedMixedProgQStab Gamma caps L prog chunks mode spec
+
 /-! ## §4. Regression examples. -/
 
 /-! ### Compiled SUPPORTED programs compile and verify. -/
@@ -347,5 +394,31 @@ example : (compileSynthTransversalQStab tenvQ [] bareLayout1 0 hGate2x2).toOptio
     (fun a => sameStabilizerProg a [.H 0]) = some true := by decide
 example : (compileSynthTransversalQStab tenvQ [] bareLayout1 0 [[false, true], [true, true]]).toOption.map
     (fun a => sameStabilizerProg a [.H 0, .S 0]) = some true := by decide
+
+/-! ## §6. The unified compiler `compileAndVerifyMixedProgQStab` (structural ▸ synth ▸ error). -/
+
+-- a STRUCTURAL program compiles + verifies:
+example : ok? (compileAndVerifyMixedProgQStab tenvQ [] bareLayout1
+    [.transversal 0 hGate2x2, .pauli ⟨0, 0⟩ .Z]) = true := by decide
+-- a non-H/S transversal `HS` compiles via SYNTHESIS and verifies:
+example : ok? (compileAndVerifyMixedProgQStab tenvQ [] bareLayout1 [.transversal 0 [[false, true], [true, true]]]) = true := by decide
+-- a MIXED structural + synthesized-transversal program compiles IN ORDER (`[.X 0, .H 0, .S 0]`):
+example : (compileAndVerifyMixedProgQStab tenvQ [] bareLayout1
+    [.pauli ⟨0, 0⟩ .X, .transversal 0 [[false, true], [true, true]]]).toOption.map
+    (fun a => sameStabilizerProg a [.X 0, .H 0, .S 0]) = some true := by decide
+-- a transversal CNOT program compiles + verifies:
+example : ok? (compileAndVerifyMixedProgQStab tenv2Q [] twoLayout [.transversalCNOT cnotSpec2]) = true := by decide
+-- unsupported MAGIC rejects (no synthesis, no fake artifact):
+example : ok? (compileAndVerifyMixedProgQStab tenvQ [] bareLayout1 [.magic { kind := .tGate, target := ⟨0, 0⟩ }]) = false := by decide
+example : (match compileAndVerifyMixedProgQStab tenvQ [] bareLayout1 [.magic { kind := .tGate, target := ⟨0, 0⟩ }] with
+           | .error (.unsupportedMixed _) => true | _ => false) = true := by decide
+-- a general AUTOMORPHISM is witness-required (the unified compiler does NOT synthesize it):
+example : (match compileAndVerifyMixedProgQStab tenvQ [] bareLayout1 [.automorphism 0 [[false, true], [true, false]]] with
+           | .error (.unsupportedMixed _) => true | _ => false) = true := by decide
+-- a WRONG (malformed) layout rejects:
+example : ok? (compileAndVerifyMixedProgQStab tenv2Q [] badLayout [.transversalCNOT cnotSpec2]) = false := by decide
+-- an ILLEGAL transversal (H on the repetition code) rejects at the TYPE CHECKER:
+example : (match compileAndVerifyMixedProgQStab tenvR [] repLayout [.transversal 0 hGate2x2] with
+           | .error (.typeError _) => true | _ => false) = true := by decide
 
 end Compiler.Verification

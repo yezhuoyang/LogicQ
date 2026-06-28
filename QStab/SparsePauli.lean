@@ -44,10 +44,12 @@ def SparsePauli.wf (P : SparsePauli) : Bool := P.noIdentity && P.nodupQubits
     measurement is meaningless). -/
 def SparsePauli.wfMeas (P : SparsePauli) : Bool := P.wf && !P.isEmpty
 
-/-- The (unchecked) dense form over physical qubits `0 … n-1` (absent qubit ⇒ identity).
-    INTERNAL: use `toDense?`, which gates the well-formedness FIRST so out-of-range factors
-    are rejected rather than silently dropped. -/
-def SparsePauli.denseOf (n : Nat) (P : SparsePauli) : PauliString :=
+/-- The (UNCHECKED) dense form over physical qubits `0 … n-1` (absent qubit ⇒ identity).
+    `PRIVATE` (audit fix): this SILENTLY DROPS out-of-range factors
+    (`denseOf 4 [(5, X)] = IIII`), so it is a footgun if public.  It is reachable ONLY via
+    the CHECKED `toDense?` (below), which gates well-formedness FIRST.  External modules
+    must use `toDense?`. -/
+private def SparsePauli.denseOf (n : Nat) (P : SparsePauli) : PauliString :=
   (List.range n).map (fun q => ((P.find? (fun f => f.1 == q)).map Prod.snd).getD Pauli.I)
 
 /-- Why a sparse measurement could not densify (machine-readable, never silent). -/
