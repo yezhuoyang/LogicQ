@@ -44,6 +44,31 @@ or `badDimension`.
 
 ## Example
 
+### Surface macro (paper-facing)
+
+The paper-facing entry point for this family is the ChainQ `code … as LiftedProduct`
+macro — it parses today (`ChainQ/SurfaceSyntax.lean`) and elaborates to a
+`NamedCodeDecl` wrapping `CodeDecl.liftedProduct`. The `protograph` is a matrix of
+univariate circulant polynomials in `x` (`1` = identity, `x` = single shift):
+
+```lean
+-- parses today — ChainQ/SurfaceSyntax.lean
+code lp20020 as LiftedProduct {
+  ell        = 8;
+  rows       = 3;
+  cols       = 4;
+  protograph = [[1, x, x^2, 1], [x, 1, 1, x^2], [x^2, 1, x, 1]];
+  params     = (200, 20, 10);
+}
+```
+
+The macro records `params = (200, 20, 10)` as the *claimed* `[[200,20,10]]`
+lifted-product parameters; `check?` remains the checked boundary into
+`CheckedCSSCode`, and the raw / `?` / `Except` constructors below are the underlying
+machine-form builders that the elaborated `CodeDecl.liftedProduct` dispatches to.
+
+### Raw / checked constructors (machine form)
+
 The raw constructor input — a `1×2` ring matrix `A = [1, x]` at `ℓ = 3` (each circulant
 is an exponent list: `[0]` = `1`, `[1]` = `x`):
 

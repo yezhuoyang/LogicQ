@@ -48,10 +48,24 @@ theorem CompiledPPM.targets_valid {Γ : TypedEnv} {caps : List Capability}
 
 The fragments are `PPM.Stmt` values checked under `tenvQ` (a `TypedEnv` holding the
 single bare logical qubit `q0`, [TypeChecker/Judgment/PPM/Examples.lean:17](../../TypeChecker/Judgment/PPM/Examples.lean#L17),26)
-with no capabilities. The raw PPM programs:
+with no capabilities.
+
+In PPM surface syntax (parses today — [PPM/Parse.lean](../../PPM/Parse.lean), by `decide`),
+the accepting fragment is a native single-qubit measurement binding the outcome `c0` to the
+logical Pauli `Z` on logical qubit `q[0]`:
+
+```text
+c0 := M q[0]↦Z
+```
+
+The empty measurement (no Pauli factors) has no surface form — the parser requires at least
+one `LQubit ↦ PLetter` factor — so it is exhibited only as the rejecting machine-form AST below.
+
+As the underlying `PPM.Stmt` machine-form AST (the values fed to `mkCompiledPPM?` in
+[Basic.lean](Basic.lean)):
 
 ```lean
--- the native single-qubit measurement fragment — binds outcome r=0 to M_Z on logical qubit ⟨0,0⟩:
+-- the native single-qubit measurement fragment — binds outcome c0 to M_Z on logical qubit ⟨0,0⟩ (= q[0]):
 .meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)]   -- OK: validates into proof-carrying evidence
 -- the empty measurement fragment (no Pauli factors):
 .meas 0 []                          -- rejected: non-native / empty measurement list
@@ -76,7 +90,7 @@ Honest scope, mirroring [Compiler/CONTRACT.md](../CONTRACT.md):
 
 - **Proved (P):** the three `theorem`s — `CompiledPPM.wellFormed`, `CompiledPPM.meas_legal`, and `CompiledPPM.targets_valid` — are universally-quantified soundness statements over any compiled fragment. They establish well-formedness, measurement legality (via `checkPPMStmt_meas_sound`), and target validity (via `checkPPMStmt_targets_valid`) at the **type-checking** level only.
 - **Decided (D):** the two PPM fragments above — the single-qubit `Z` measurement accepts, the empty measurement list rejects (decided by `by decide` smoke tests in [Basic.lean](Basic.lean)).
-- **Planned / stub (M):** the actual PPR-to-PPM lowering pass. There is **no** code here that lowers Pauli-product rotations to adaptive PPM, and **no** denotational/operational-equivalence theorem of the intended shape `denote(PPR program) = semantics(lowered PPM program)`. Magic-resource tracking for such a pass is likewise not present.
+- **Planned / stub (M):** the actual PPR-to-PPM lowering pass. There is **no** code here that lowers Pauli-product rotations to adaptive PPM, and **no** denotational/operational-equivalence theorem of the intended shape `denote(PPR program) = semantics(lowered PPM program)`. Magic-resource tracking for such a pass is likewise not present. For reference, both endpoints of the intended bridge already have real text parsers: the PPR source side parses today ([PPR/Parse.lean](../../PPR/Parse.lean), by `decide`), e.g. a `T` rotation `+π/8 · q[0]↦Z`, an `S` rotation `+π/4 · q[0]↦Z`, and a two-body `ZZ` rotation `+π/8 · q[0]↦Z q[1]↦Z`; the PPM target side parses today ([PPM/Parse.lean](../../PPM/Parse.lean), by `decide`), e.g. `c0 := M q[0]↦Z` and the joint measurement `c0 := M q[0]↦Z, a[0]↦X`.
 
 Nothing here makes a channel-correctness, fault-tolerance, distance, or decoder claim; the guarantees are confined to TypeChecker legality of a measurement fragment.
 

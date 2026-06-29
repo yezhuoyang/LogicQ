@@ -56,15 +56,23 @@ theorem progH_frame (I : QInterp Q) (ρ : Q) (s₁ s₂ : Sign) :
 
 ## Example
 
-These are `MTarget` values (logical Pauli products) in the QMeas alphabet. With `dataQ i = ⟨0,i⟩` and `ancQ i = ⟨1,i⟩` ([Syntax.lean](Syntax.lean)), the underlying data is:
+The straight-line PPM fragment has a real text parser — it **parses today** by `decide` ([Parse.lean](Parse.lean)). Logical qubits are written `block[index]` with square brackets (`q[0]`, `a[0]`), classical outcomes are `c<n>`, and a measurement target is a comma-separated list of `LQubit ↦ PLetter` factors:
 
-```lean
-[(⟨0,0⟩, .Z), (⟨1,0⟩, .X)]   -- OK: M_{ZX}(q0, a0) — a 2-body joint logical measurement
-[(⟨0,0⟩, .X)]                -- OK: M_X(q0) — a single-qubit logical measurement
-[(⟨0,0⟩, .Z), (⟨0,0⟩, .X)]   -- rejected: repeated logical qubit
+```text
+c0 := M q[0]↦Z, a[0]↦X      -- M_{ZX}(q[0], a[0]) — a 2-body joint logical measurement
+c1 := M q[0]↦X              -- M_X(q[0]) — a single-qubit logical measurement
+frame Z(q[0])               -- record a Z byproduct on q[0]
+discard q[0]                -- retire logical qubit q[0]
+skip; abort                 -- newline/';'-separated statements
 ```
 
-The native measurement alphabet requires one or two factors with no repeated logical qubit. Source: [Syntax.lean](Syntax.lean) (lines 183-185).
+Block names (`q`, `a`, …) map to `Logical.BlockId`s in first-occurrence order, so `q` interns to block `0` and `a` to block `1`. The two-body line above parses to the `MTarget` value (machine form, [Syntax.lean](Syntax.lean)):
+
+```lean
+[.meas 0 [(⟨0, 0⟩, .Z), (⟨1, 0⟩, .X)]]   -- c0 := M q[0]↦Z, a[0]↦X
+```
+
+The native measurement alphabet requires one or two factors with no repeated logical qubit (`MTarget.wf`); a repeated qubit such as `c0 := M q[0]↦Z, q[0]↦X` parses but is structurally rejected by `MTarget.wf`. Source: [Parse.lean](Parse.lean) (lines 132-145), [Syntax.lean](Syntax.lean) (lines 183-185).
 
 ## Status & scope
 

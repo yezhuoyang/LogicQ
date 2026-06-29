@@ -3,8 +3,10 @@
 > Shared logical-level addressing vocabulary: which logical qubit of which logical block.
 
 This is the smallest shared layer in the LogicQ stack. The front end (ChainQ) declares
-logical *blocks* — code patches like `surface q1 [n,k,d]` — and the logical IRs (PPR, PPM)
-compute on the logical *qubits* of those blocks. This module fixes the single `LQubit`
+logical *blocks* — code patches such as the surface code, whose machine-form AST is
+`CodeDecl.surface 3` (surface/toric have no surface macro; ChainQ/Syntax.lean) — and the
+logical IRs (PPR, PPM) compute on the logical *qubits* of those blocks. This module fixes
+the single `LQubit`
 address type so every logical level (ChainQ source, PPR/PPM, TypeChecker, Compiler source)
 refers to the same addressing scheme. There are no physical qubits here; those appear only
 after lowering to QStab / QClifford.
@@ -30,9 +32,11 @@ structure LQubit where
   deriving DecidableEq, Repr, Inhabited
 ```
 
-`BlockId` indexes a declared logical block (the front end maps block names `q1`, `q2`, `t0`
-to ids). `LQubit` is the `idx`-th logical qubit of block `blk` (intended `0 ≤ idx < k_blk`);
-surface syntax `q1[0]` is `⟨q1, 0⟩`.
+`BlockId` indexes a declared logical block (the front end maps block names `q`, `a`, `t`
+to numeric ids in first-occurrence order). `LQubit` is the `idx`-th logical qubit of block
+`blk` (intended `0 ≤ idx < k_blk`). In the logical-IR surface syntaxes a logical qubit is
+written *block name* + *index* in square brackets, e.g. `q[0]` (the first block, id `0`);
+its `LQubit` machine form is `⟨0, 0⟩`.
 
 ## Example
 

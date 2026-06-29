@@ -62,6 +62,21 @@ structural lowerer can discharge the relevant QStab/extraction obligations.
 
 ## Example
 
+The accepted OpenQASM-2 surface (parses **and** compiles today — [Parse.lean](Parse.lean)). A logical qubit is `q[i]` (block name + `[index]`, square brackets); block names map to numeric block ids in first-occurrence order:
+
+```text
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+creg c[2];
+h q[0];
+cx q[0],q[1];
+measure q[0] -> c[0];
+measure q[1] -> c[1];
+```
+
+The same source as a Lean `String` value, and the AST it parses to (machine form):
+
 ```lean
 -- a full Bell-style program: header, include, comment, qreg/creg, h/cx/measure, newlines:
 def bellSrc : String :=
@@ -95,7 +110,7 @@ Honest scope, mirroring `Compiler/CONTRACT.md` tiers (D = `by decide` test, A = 
 - **(D) Parser + allocator + typed emission.** Both phases are exercised by extensive positive/negative `by decide` tests in [Parse.lean](Parse.lean), [Allocate.lean](Allocate.lean), and [AuditTests.lean](AuditTests.lean): supported gates, exact aliases (`sdg`, `tdg`), comments, malformed-text `ParseError`s, out-of-contract `Instr.unsupported`, resource validation, fresh SSA measurement `CVar`s, and strict vs. fallback CNOT mode.
 - **(A/reuse) Legality checking is delegated, not re-proved here.** `compileQASMToMixIR?` calls the verified `compileChainQToMixIR?`, which performs the real addressing / ancilla basis & consumption / PPM / transversal / magic typing. This layer adds no new soundness theorem — it reuses the underlying one.
 - **(M) Completeness is bounded.** The pipeline is complete **only** for the accepted QASM subset (`h s x z t cx cz measure barrier`, with `sdg`/`tdg` expanded), given enough basis-correct user-supplied logical/ancilla resources, and subject to existing ChainQ/TypeChecker legality. **No** arbitrary rotations, **no** Clifford+T synthesis, **no** custom-gate expansion, **no** `reset`, **no** dynamic `if` — these are correct rejections, never approximations.
-- **(M / deferred) No full physical correctness.** The emitted `CompiledMixIR` is checked for logical/resource legality. [Physical.lean](Physical.lean) adds a real structural QStab/QClifford path for the currently verified stabilizer fragment and prepends one physical stabilizer-extraction pass over every resident code block. Repeated syndrome rounds, decoder logic, fault-tolerance padding, and T-gate magic injection remain **deferred obligations**. The physical path still **explicitly rejects** `.magic`, `.switch`, scheduled/controlled PPM, automorphisms without chunks, and parallel PPM rather than fabricating a circuit.
+- **(M / deferred) No full physical correctness.** The emitted `CompiledMixIR` is checked for logical/resource legality. [Physical.lean](Physical.lean) adds a real structural QStab/QClifford path for the currently verified stabilizer fragment and prepends one physical stabilizer-extraction pass over every resident code block. Repeated syndrome rounds, decoder logic, fault-tolerance padding, and T-gate magic injection remain **deferred obligations**. The physical path still **explicitly rejects** `.magic`, `.switch`, scheduled/controlled PPM, automorphisms without chunks, and parallel PPM rather than fabricating a circuit — these are accepted into the executable MixedIR surface by `mixPrimToMixedInstr?` but rejected with `unsupportedMixed` at the MixedIR→QStab structural lowering ([../Verification/Basic.lean](../Verification/Basic.lean), the `.automorphism`/`.switch`/`.magic` cases).
 - **(D) Benchmark boundary.** [Benchmarks.lean](Benchmarks.lean) embeds 20 QASMBench programs. All 20 still compile through MixedIR under the existing separated/packed bare setups; every no-magic case also compiles through QClifford under separated bare blocks, while the T-containing cases are kept as negative physical tests until MagicQ gate injection is wired.
 
 Everything outside the contract is a correct rejection (`ParseError` for malformed text, `QASMError`/`FrontendError.compile` for out-of-contract gates or insufficient/ill-typed resources), never a silent drop or miscompile.

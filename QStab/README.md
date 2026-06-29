@@ -2,7 +2,7 @@
 
 > The physical stabilizer-measurement IR (level `L_QStab`): a classical dataflow of physical Pauli-product measurements and parities.
 
-`QStab` is the **physical target** the LogicQ pipeline lowers toward (front-end ChainQ code families -> TypeChecker legality -> Compiler Mixed IR -> PPM/LS surgery edges -> **QStab** -> QClifford). A QStab `Prog` is an SSA-style dataflow: each statement binds the next classical variable `c0, c1, …`, where a `prop` is a physical Pauli measurement (`Prop[r,s] P`) and a `parity` is the classical XOR of earlier outcomes (syndromes / logical-readout bits). `eval` computes those classical bits from the `±1` measurement outcomes; the quantum back-action is intentionally outside this small semantics. The `Mixed`/`PPM` edge feeds in via `ppmMeasToQStab`, and `Compiler.QStab2QClifford` lowers this dataflow out to QClifford using explicit syndrome-extraction schemes.
+`QStab` is the **physical target** the LogicQ pipeline lowers toward (front-end ChainQ code families -> TypeChecker legality -> Compiler Mixed IR -> PPM/LS surgery edges -> **QStab** -> QClifford). A QStab `Prog` is an SSA-style dataflow: each statement binds the next classical variable `c0, c1, …`, where a `prop` is a physical Pauli measurement (`c0 = Prop[r=0,s=0] ZZI`) and a `parity` is the classical XOR of earlier outcomes (`d0 = Parity c0 c2`, syndromes / logical-readout bits). The surface text parses today by `decide` — [Parse.lean](Parse.lean). `eval` computes those classical bits from the `±1` measurement outcomes; the quantum back-action is intentionally outside this small semantics. The `Mixed`/`PPM` edge feeds in via `ppmMeasToQStab`, and `Compiler.QStab2QClifford` lowers this dataflow out to QClifford using explicit syndrome-extraction schemes.
 
 ## What's here
 
@@ -10,6 +10,7 @@
 |---|---|
 | [Basic.lean](Basic.lean) | Umbrella import for the whole QStab layer |
 | [Syntax.lean](Syntax.lean) | Dense `PauliString`, `Sched`, `Stmt` (`prop`/`parity`), `Prog`, and well-formedness `Prog.wf` |
+| [Parse.lean](Parse.lean) | Total text parser for the surface forms (`c0 = Prop[r=0,s=0] ZZI`, `d0 = Parity c0 c2`) → `Prog`; tests are `by decide` |
 | [Semantics.lean](Semantics.lean) | Classical dataflow `eval`/`evalVar` over `Bool` outcomes + `eval_length` |
 | [StabilizerProgram.lean](StabilizerProgram.lean) | Richer `StabilizerInstr` shell (preps/Cliffords/`ifPauli`) projecting to the checked dataflow |
 | [SparsePauli.lean](SparsePauli.lean) | Explicit indexed `SparsePauli` + CHECKED densification `toDense?` |
@@ -61,8 +62,21 @@ from [StabilizerProgram.lean](StabilizerProgram.lean) — `.bind` is the only va
 
 `progReadout` (defined in [Syntax.lean:80](Syntax.lean#L80)) is itself a QStab `Prog`: it
 measures `ZZI`/`IZZ` over two rounds and forms syndrome parities `d0, d1` plus a logical
-output `o0`. As pure QStab syntax it is the list of statements (binding `c0..c4`, then
-`d0, d1, o0`):
+output `o0`. In QStab surface syntax (binding `c0..c4`, then `d0, d1, o0`) it is — and this
+exact text parses today by `decide` to `progReadout`, [Parse.lean:102](Parse.lean#L102):
+
+```rust
+c0 = Prop[r=0,s=0] ZZI    // c0  (round 0, check ZZI)
+c1 = Prop[r=0,s=1] IZZ    // c1  (round 0, check IZZ)
+c2 = Prop[r=1,s=0] ZZI    // c2  (round 1, check ZZI)
+d0 = Parity c0 c2         // d0 = c0 ⊕ c2   (syndrome bit, var 3)
+c3 = Prop[r=1,s=1] IZZ    // c3  (round 1, check IZZ)
+d1 = Parity c1 c3         // d1 = c1 ⊕ c3   (syndrome bit, var 5)
+c4 = Prop ZZZ             // c4  (logical Z readout; scheduling coords optional)
+o0 = Parity c4            // o0 = c4         (logical output, var 7)
+```
+
+The same program as the checked Lean AST (machine form, [Syntax.lean:80](Syntax.lean#L80)):
 
 ```lean
 -- progReadout : Prog  (a distance-3 repetition-style syndrome + logical readout)

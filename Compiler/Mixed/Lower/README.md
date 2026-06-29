@@ -58,6 +58,13 @@ theorem AncillaPool.alloc_valid (Γ : TypedEnv) (R : PPMState) (basis : AncBasis
 
 ## Example
 
+> Both the source (`LogicalOp`) and target (`MixedInstr`) of this layer are INTERNAL
+> Lean ASTs — the Mixed IR has **no surface grammar / text parser**.  Every code block
+> below is the real Lean AST (machine form), shown verbatim from
+> [Compiler/Mixed/Syntax.lean](../Syntax.lean) (`LogicalOp`, `MixedInstr`) and
+> [Compiler/Mixed/Source.lean](../Source.lean) (the source typing judgments); these are
+> NOT a surface concrete syntax and are not meant to be typed by hand.
+
 The input to this layer is a straight-line `LogicalOp` source program (`List LogicalOp`)
 type-checked against a `TypedEnv`.  The fixture is the single-logical (`k=1`) block
 `tenvQ` ([TypeChecker/Judgment/PPM/Examples.lean:17,26](../../../TypeChecker/Judgment/PPM/Examples.lean#L17)):
@@ -68,8 +75,9 @@ def tenvQ : TypedEnv := ⟨[⟨q0, by decide⟩]⟩   -- one bare logical qubit:
 ```
 
 These are the source programs `compile?` is run on (from [Examples.lean](Examples.lean)), with the
-mode (the magic policy) shown beside each.  `executable` rejects `T`; `moduloMagic` keeps it as a
-typed `.magic` obligation; an invalid operand is rejected by the source typecheck before any mode policy:
+mode (the magic policy) shown beside each — each program is a `List LogicalOp` machine-form value.
+`executable` rejects `T`; `moduloMagic` keeps it as a typed `MixedInstr.magic` obligation; an invalid
+operand is rejected by the source typecheck before any mode policy:
 
 ```lean
 [.tGate ⟨0, 0⟩]                  -- under .executable:  rejected: T has no Step semantics (magic policy)
@@ -96,8 +104,9 @@ The accept/reject decisions ride on the source-program typing judgment `ProgramO
 [.tGate ⟨0, 0⟩]   -- under Resources ⟨⟨0,0⟩, allowMagic := false⟩: rejected: magic not admitted
 ```
 
-A `T`-containing program is NOT executable-shaped: it type-checks only modulo magic, lowering to a
-deferred obligation rather than a `Step`-semantic instruction:
+A `T`-containing TARGET program is NOT executable-shaped: it type-checks only modulo magic, lowering to a
+deferred obligation rather than a `Step`-semantic instruction.  These are `List MixedInstr` machine-form
+values (the lowered IR), not source ops:
 
 ```lean
 [.magic { kind := .tGate, target := ⟨0, 0⟩ }]   -- type-checks (modulo magic); progNoMagic = false

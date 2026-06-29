@@ -52,7 +52,8 @@ def ppmMeasToQStab (sched : Option QStab.Sched) (P : QStab.PauliString) : QStab.
 ```
 
 The native fixture in this folder ([`Basic.lean`](Basic.lean)) — the `progZZ` definition and
-the QStab `Prog` value it unfolds to (`ppmMeasToQStab (some ⟨0,0⟩) "ZZ"` = `[.prop "ZZ", .parity [0]]`):
+the QStab `Prog` value it unfolds to (`ppmMeasToQStab (some ⟨0,0⟩) (Physical.ofString "ZZ")` =
+`[.prop (some ⟨0,0⟩) [Pauli.Z, Pauli.Z], .parity [0]]`):
 
 ```lean
 def progZZ : QStab.Prog := LS.ppmMeasToQStab (some ⟨0, 0⟩) (Physical.ofString "ZZ")
@@ -60,6 +61,21 @@ def progZZ : QStab.Prog := LS.ppmMeasToQStab (some ⟨0, 0⟩) (Physical.ofStrin
 -- progZZ as a concrete QStab.Prog value:
 [ .prop (some ⟨0,0⟩) [Pauli.Z, Pauli.Z]   -- stmt 0: measure the ZZ parity (scheduled at slot ⟨0,0⟩)
 , .parity [0] ]                            -- stmt 1: read its outcome (the readout var = 1)
+```
+
+This is a pass-bridge edge, so the two sides have concrete surface syntax. The SOURCE is a
+single logical Z-parity PPM measurement (parses today — [`PPM/Parse.lean`](../../PPM/Parse.lean)):
+
+```text
+c0 := M q[0]↦Z, q[1]↦Z      -- one logical Z⊗Z (ZZ) parity measurement
+```
+
+`ppmMeasToQStab` lowers that to the TARGET QStab program `progZZ`, whose value is exactly what
+the QStab text parser produces (parses today — [`QStab/Parse.lean`](../../QStab/Parse.lean)):
+
+```text
+c0 = Prop[r=0,s=0] ZZ       -- measure the dense physical Z-parity ZZ at round 0, slot 0
+d0 = Parity c0              -- read its outcome (the readout var = 1)
 ```
 
 ## Example
@@ -71,8 +87,8 @@ plus the `certZZ` certificate VALUE it certifies:
 -- The surgery certificate VALUE for the ZZ-parity measurement (the recorded surgery data
 -- with all fault obligations DEFERRED):
 def certZZ : LS.SurgeryCert where
-  measuredParity        := [Pauli.Z, Pauli.Z]      -- the measured logical Z-parity ("ZZ")
-  preservedLogicals     := [[Pauli.X, Pauli.X]]    -- the X-logical preserved by a Z-parity merge ("XX")
+  measuredParity        := Physical.ofString "ZZ"    -- the measured logical Z-parity = [Pauli.Z, Pauli.Z]
+  preservedLogicals     := [Physical.ofString "XX"]  -- the X-logical preserved by a Z-parity merge = [[Pauli.X, Pauli.X]]
   byproductFrame        := []                       -- +1 outcome ⇒ no byproduct (track-not-apply)
   claimedMergedCommutes := true                     -- CLAIM: ZZ commutes with the data Z-stabilizers (CSS)
   claimedDetectorsDet   := true                     -- CLAIM: noiseless ⇒ deterministic
@@ -85,7 +101,7 @@ record its certificate; their checked outcomes (from [Basic.lean](Basic.lean)) a
 
 ```lean
 certZZ.check                                                       -- = true:  parity nonempty, a preserved logical, all deferred
-LS.SurgeryCert.detectorsDeterministic? progZZ                     -- = true:  noiseless ⇒ fixed readout (readout var = 1, in range, wf)
+LS.SurgeryCert.detectorsDeterministic? progZZ LS.ppmMeasToQStab_readout  -- = true:  noiseless ⇒ fixed readout (readout var = 1, in range, wf)
 certZZ.faults.allDeferred                                          -- = true:  none certified — honest by construction
 LS.SurgeryCert.check { certZZ with faults := { distance := .certified } }
                                                                   -- = false: a cert dishonestly claiming `certified` distance is REJECTED

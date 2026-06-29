@@ -68,7 +68,7 @@ structure Phase where
 structure Rot where
   phase : Phase
   pauli : PauliString
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, DecidableEq
 
 /-- A **PPR program**: a sequence of Pauli-product rotations, applied in order
     (left to right). -/

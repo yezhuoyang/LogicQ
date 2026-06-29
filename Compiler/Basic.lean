@@ -6,7 +6,8 @@
   under `Compiler/Mixed/` (the Mixed IR + checker + source typing + lowering +
   semantics), `Compiler/Simulator/` (the exact GInt simulator + `execMixed`),
   `Compiler/ChainQ2Mixed/` and `Compiler/QASM/` (ChainQ/QASM-facing logical
-  allocation into checked Mixed IR),
+  allocation into checked Mixed IR), `Compiler/Surface/` (the `.lqr` surface-language
+  text front-end, compiling through the QASM backend),
   `Compiler/PPR2PPM/`, `Compiler/LS2QStab/`, and `Compiler/QStab2QClifford/`
   (pass-stage bridges),
   `Compiler/CodeSwitch/` (external/assumed code-switch certificates), and
@@ -20,6 +21,7 @@ import Compiler.Simulator
 import Compiler.LogicalToQStab
 import Compiler.ChainQ2Mixed.Basic
 import Compiler.QASM.Basic
+import Compiler.Surface.Basic
 import Compiler.QStab2QClifford.Basic
 import Compiler.CodeSwitch
 import Compiler.Verification.Basic

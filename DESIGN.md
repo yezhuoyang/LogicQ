@@ -15,7 +15,7 @@ This document is the detailed plan. It is grounded in a survey of the FormalRV c
 
 | # | Decision | Choice |
 |---|---|---|
-| 1 | High-level surface syntax | **Lean-embedded DSL first** (structures + macros, e.g. `surface! { … }`); faithful textual parser deferred to a later phase. |
+| 1 | High-level surface syntax | **Lean-embedded DSL first** (structures + macros, e.g. ChainQ `code … as LiftedProduct { … }`). **Faithful textual parsers now exist at every level** (`Parsing/Basic.lean` + each layer's `Parse.lean`, all `by decide`-tested): the `.lqr` surface front-end (`Compiler/Surface/Parse.lean`) and OpenQASM (`Compiler/QASM/Parse.lean`) parse **and compile** to Mixed IR; PPM/PPR/QStab/QClifford have total text→AST parsers. Remaining surface features (adaptive PPM control flow, richer `.lqr` code families) are the next increment. |
 | 2 | Fault-tolerance scope | **Correctness up to named obligations** — semantics preservation is *proven* through all levels; decoder correctness, code distance, and magic-state physics are *explicit named hypotheses* (FormalRV's `VerifiedShorOnCode` discipline), never silent `sorry`. |
 | 3 | Relationship to FormalRV | **Vendor** the minimal needed FormalRV modules into LogicQ (self-contained repo, no external dependency). |
 | 4 | Middle-of-pipeline shape | **Linear** `PPM → LatticeSurgery → QStab → QClifford` (PPM statements are *realized by* surgery; one `realizes_trans` fold). |

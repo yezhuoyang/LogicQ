@@ -59,6 +59,19 @@ rows over the merged `2·(Σ n_block + ancN)`-wide symplectic space.
 
 ## Example
 
+The capability backs a **joint logical Pauli measurement** written in PPM surface
+syntax (parses today — [../../PPM/Parse.lean](../../PPM/Parse.lean), by `decide`).
+For the two data blocks `q` (block 0) and `a` (block 1), the cross-code-PPM
+measurement is:
+
+```text
+c0 := M q[0]↦Z, a[0]↦X
+```
+
+`checkPPM` consumes a `Capability` to legalize that joint `M_{ZX}(q[0], a[0])`
+target; the `Capability` itself is a checked certificate value built as the real
+Lean AST below (machine form — there is no surface grammar for capabilities):
+
 ```lean
 -- a connStab of width 8 is well-formed for mergedN = 4, malformed for mergedN = 3:
 private def capW8 : Capability :=

@@ -54,6 +54,28 @@ A concrete BB code value — the bivariate-bicycle instance with `ℓ = m = 3`,
 `A = 1 + x + y²` (exponents `[(0,0),(1,0),(0,2)]`), `B = 1 + x² + y` (exponents
 `[(0,0),(2,0),(0,1)]`):
 
+### Surface syntax (parses today — `ChainQ/SurfaceSyntax.lean`)
+
+ChainQ has a real `code … as BivariateBicycle` macro that elaborates this same
+instance to a `NamedCodeDecl`. The `A`/`B` polynomials use the `BBPoly` sugar
+(`1`, `x`, `y`, `+`, `*`, `^`), which maps to exactly the exponent lists above:
+
+```lean
+-- elaborates via the `code … as BivariateBicycle` macro in ChainQ/SurfaceSyntax.lean
+code bbInstance as BivariateBicycle {
+  l = 3;
+  m = 3;
+  A = 1 + x + y^2;
+  B = 1 + x^2 + y;
+  params = (18, 2, 3);
+}
+```
+
+### Machine form (raw constructor AST)
+
+The same code as the underlying `Internal.bb` value — the machine-form AST the
+macro denotes:
+
 ```lean
 -- The BB program/value (raw constructor): n = 18, CSS ✓, hx is a 9×18 matrix.
 Internal.bb 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]
@@ -72,7 +94,8 @@ mkBB 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]  -- OK: a CheckedCSSCode
 mkBB 0 3 [(0,0)] [(0,0)]                           -- rejected: degenerateParam "BB: ℓ and m must be ≥ 1"
 ```
 
-Source: [Basic.lean](Basic.lean) (§4 Tests), [Checked.lean](Checked.lean) (§4 Tests).
+Source: [Basic.lean](Basic.lean) (§4 Tests), [Checked.lean](Checked.lean) (§4 Tests),
+[../SurfaceSyntax.lean](../SurfaceSyntax.lean) (`code … as BivariateBicycle` macro).
 
 ## Status & scope
 

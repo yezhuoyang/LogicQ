@@ -100,19 +100,34 @@ expected and do **not** demonstrate physical expansion.
 | `cat_state_n4` | bare d=1 sanity | 8 | 8 | 8 | 0 | 8 | 8 | 8 | 4 |
 | `ghz_n78` | bare d=1 sanity | 156 | 156 | 156 | 0 | 156 | 156 | 156 | 78 |
 
-Larger direct QASMBench sources are also checked under the separated-bare setup. These rows
-exercise parsing, allocation, ChainQ/LogicQ lowering, MixedIR lowering, QStab generation, and
-QClifford extraction on nontrivial source circuits. Because each logical qubit is mapped to a
-one-physical-qubit bare block, these rows are not code-distance scaling evidence:
+The larger QASMBench rows below are encoded into actual Steane `[[7,1,3]]` CSS code
+blocks, one code block per QASM virtual qubit. The compiler checks the Steane code and
+logical basis, performs logical-qubit allocation, lowers H/CX/X/Z/measurement through the
+encoded pipeline, prepends one stabilizer-extraction pass for every resident code block,
+and extracts the resulting QStab program to QClifford. The two positive-suite programs
+containing T gates (`teleportation_n3`, `qec_en_n5`) are checked negatives until magic-state
+injection is wired into the physical path.
 
-| QASMBench source | Category/setup | QASM | LogicQ | MixedIR | Syn QStab | Logical QStab | Total QStab | QClifford | Width |
+| QASMBench source | Encoded setup | QASM | LogicQ | MixedIR | Syn QStab | Logical QStab | Total QStab | QClifford | Width |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `cat_state_n4` | Cat/GHZ, bare d=1 | 8 | 8 | 8 | 0 | 8 | 8 | 8 | 4 |
-| `hs4_n4` | Hidden shift, bare d=1 | 32 | 32 | 32 | 0 | 32 | 32 | 32 | 4 |
-| `qec9xz_n17` | QEC, bare d=1 | 61 | 61 | 61 | 0 | 61 | 61 | 61 | 17 |
-| `bv_n30` | Bernstein-Vazirani, bare d=1 | 107 | 107 | 107 | 0 | 107 | 107 | 107 | 30 |
-| `cat_n65` | Cat/GHZ, bare d=1 | 130 | 130 | 130 | 0 | 130 | 130 | 130 | 65 |
-| `ghz_n78` | Cat/GHZ, bare d=1 | 156 | 156 | 156 | 0 | 156 | 156 | 156 | 78 |
+| `qrng_n4` | Steane x4 | 8 | 8 | 8 | 24 | 32 | 56 | 220 | 56 |
+| `deutsch_n2` | Steane x2 | 7 | 7 | 7 | 12 | 37 | 49 | 131 | 28 |
+| `iswap_n2` | Steane x2 | 11 | 11 | 11 | 12 | 65 | 77 | 159 | 28 |
+| `cat_state_n4` | Steane x4 | 8 | 8 | 8 | 24 | 32 | 56 | 220 | 56 |
+| `grover_n2` | Steane x2 | 18 | 18 | 18 | 12 | 114 | 126 | 208 | 28 |
+| `lpn_n5` | Steane x5 | 16 | 16 | 16 | 30 | 82 | 112 | 317 | 70 |
+| `hs4_n4` | Steane x4 | 32 | 32 | 32 | 24 | 200 | 224 | 388 | 56 |
+| `bb84_n8` | Steane x8 | 43 | 43 | 43 | 48 | 205 | 253 | 645 | 120 |
+| `qec9xz_n17` | Steane x17 | 61 | 61 | 61 | 102 | 379 | 481 | 1106 | 229 |
+| `cat_state_n22` | Steane x22 | 44 | 44 | 44 | 132 | 176 | 308 | 1210 | 308 |
+| `ghz_state_n23` | Steane x23 | 46 | 46 | 46 | 138 | 184 | 322 | 1265 | 322 |
+| `bv_n14` | Steane x14 | 54 | 54 | 54 | 84 | 300 | 384 | 950 | 195 |
+| `bv_n19` | Steane x19 | 74 | 74 | 74 | 114 | 410 | 524 | 1295 | 265 |
+| `cat_n35` | Steane x35 | 70 | 70 | 70 | 210 | 280 | 490 | 1925 | 490 |
+| `ghz_n40` | Steane x40 | 80 | 80 | 80 | 240 | 320 | 560 | 2200 | 560 |
+| `bv_n30` | Steane x30 | 107 | 107 | 107 | 180 | 575 | 755 | 1977 | 419 |
+| `cat_n65` | Steane x65 | 130 | 130 | 130 | 390 | 520 | 910 | 3575 | 910 |
+| `ghz_n78` | Steane x78 | 156 | 156 | 156 | 468 | 624 | 1092 | 4290 | 1092 |
 
 Direct MixedIR fixtures are also checked. `QASM = 0` and `LogicQ = 0` mean the input
 starts at MixedIR, not that earlier layers compiled away:
@@ -150,33 +165,39 @@ incidence realizes the requested logical CNOT for that toric logical basis.
 [Mixed IR](Compiler/Mixed/README.md) target and [its lowering](Compiler/Mixed/Lower/README.md);
 the verified [ChainQ2Mixed](Compiler/ChainQ2Mixed/README.md) front-end (path + schedule +
 QGPU/qLDPC); the [QStab2QClifford](Compiler/QStab2QClifford/README.md) syndrome-extraction
-pass; the [OpenQASM-2 front-end](Compiler/QASM/README.md); the
+pass; the [OpenQASM-2 front-end](Compiler/QASM/README.md) and the
+[`.lqr` surface front-end](Compiler/Surface/README.md); the
 [lattice-surgery IR](Compiler/LS/README.md); the
 [code-switch certificates](Compiler/CodeSwitch/README.md); the
 [state-vector Simulator](Compiler/Simulator/README.md); and the worked
 [Demo](Compiler/Demo/README.md) programs.
 
-## One program at every level — the same program in each IR's syntax
+## One program at every level — in the project's BNF surface syntax
 
-The QASM front-end ingests real **QASMBench** circuits — e.g. `deutsch_n2`, `iswap_n2`
-([Compiler/QASM/Benchmarks.lean](Compiler/QASM/Benchmarks.lean)) — and lowers them down the
-tower. To see the lowering as *the same program rewritten in each language's own syntax*, here
-is a minimal program — **flip a qubit, then read it out** — written out at every level (not as
-compiler calls, but as the actual program value in each IR).
+Every IR level defines its concrete syntax as a **BNF grammar** in its `Syntax.lean`, and **every
+level now has a real, total text parser** (`Parsing/Basic.lean` + each layer's `Parse.lean`), with
+`by decide` round-trip tests. Below is one minimal program — **flip a qubit, then read it out** — in
+those grammars. The `.lqr` surface front-end ([Compiler/Surface/Parse.lean](Compiler/Surface/Parse.lean))
+and the OpenQASM-2 front-end ([Compiler/QASM/Parse.lean](Compiler/QASM/Parse.lean), ingesting real
+**QASMBench** circuits) additionally **compile end-to-end** to Mixed IR; the PPM/PPR/QStab/QClifford
+parsers produce their checked AST (full text-to-AST), with cross-level lowering done by the verified
+compiler passes. Mixed IR and the lattice-surgery IR remain internal ASTs (no surface grammar).
 
-The values below are the **bare** single-qubit encoding `[[1,1,1]]`, where one logical qubit is
-one physical qubit, so every box is exact; the lifted-product encoding follows at the end.
+**Surface program (`.lqr`)** — this *exact text* parses and compiles to Mixed IR. BNF:
+`Stmt ::= 'code' Id 'as' 'Bare' | ('H'|'S'|'T'|'X'|'Z') q[i] | 'CNOT' q[i] ',' q[j] | 'CZ' q[i] ',' q[j] | 'measure' q[i] '->' c[j]`.
 
-**The code — ChainQ syntax** (`ChainQ/Syntax.lean`, `inductive CodeDecl`). The logical qubit
-lives in a declared code; for this trace a bare block, with a real lifted-product qLDPC code as
-the encoded alternative:
-
-```text
-CodeDecl.css { n := 1, hx := [], hz := [] }          -- [[1,1,1]] bare block (the clean trace below)
-CodeDecl.liftedProduct 3 [[[0], [1]]] 1 2            -- ℓ=3, A=[1,x] → an n=15 lifted-product qLDPC code
+```rust
+code q as Bare           // declare the data block:  one logical = one physical
+X q[0]                   // flip logical qubit 0
+measure q[0] -> c[0]     // logical Z readout into classical bit c[0]
 ```
 
-**Level 0 — OpenQASM 2 text** (the source program):
+```lean
+-- the front-end's own verified end-to-end claim (Compiler/Surface/Parse.lean):
+example : compiles? "code q as Bare\nX q[0]\nmeasure q[0] -> c[0]" = true := by decide
+```
+
+**The same program in OpenQASM 2** — also a real, total parser ([Compiler/QASM/Parse.lean](Compiler/QASM/Parse.lean)):
 
 ```text
 qreg q[1];  creg c[1];
@@ -184,232 +205,219 @@ x q[0];
 measure q[0] -> c[0];
 ```
 
-**Level 1 — `QASMProgram`** (parsed; QASM-AST syntax):
+**Mixed IR** — the typed gate/measurement AST the front-ends compile to. *No surface grammar yet*
+(internal); machine form: the checked `MixedInstr` AST in [Compiler/Mixed/Syntax.lean](Compiler/Mixed/Syntax.lean).
+
+**QStab — physical dataflow.** BNF: `Stmt ::= QVar '=' 'Prop' PauliStr | QVar '=' 'Parity' QVar+`:
 
 ```text
-{ qregs  := [⟨"q", 1⟩],  cregs := [⟨"c", 1⟩],
-  instrs := [ .x ⟨"q",0⟩,  .measure ⟨"q",0⟩ ⟨"c",0⟩ ] }
+c0 = Prop Z              // physical Pauli measurement on the bare encoding (Z̄ = Z)
 ```
 
-**Level 2 — `ChainQPrimProgram`** (allocated onto code block `box`, logical `d0`; named ChainQ
-ops, `Compiler/ChainQ2Mixed`):
+**QClifford — physical Clifford + measurement circuit.** BNF:
+`Gate ::= 'Prep0' q | 'Prep+' q | ('H'|'S'|'X'|'Z') q | 'CNOT' c t | 'CZ' a b | 'Meas' q '->' CBit | CBit ':=' 'xor' CBit* | 'If' CBit 'then' Pauli q`:
 
 ```text
-[ .xGate "box" "d0",  .measure r [("box", "d0", .Z)] ]      -- r = the readout's classical var
+X     q0
+Prep0 a0                 // fresh |0⟩ ancilla
+CNOT  q0 a0
+Meas  a0 -> c0           // standard-Z extraction of the Z measurement
 ```
 
-**Level 3 — Mixed IR** (`List MixedInstr`; the same program in mixed-IR syntax):
-
-```text
-[ .pauli ⟨0,0⟩ .X,  .ppm (.meas r [(⟨0,0⟩, .Z)]) ]         -- X → applied logical Pauli; readout → native PPM
-```
-
-**Level 4 — the PPM fragment → lattice-surgery IR** (`Compiler.LS.Program`; the surgery IR owns
-the measurement — on the bare block `Z̄` is physical `Z` on qubit 0):
-
-```text
-{ numQubits := 1,  ops := [ .meas (some ⟨0,0⟩) [(0, .Z)] ] }
-```
-
-**Level 5 — QStab** (physical stabilizer-measurement syntax; `QStab/StabilizerProgram.lean`):
-
-```text
-[ .X 0,  .bind (.prop (some ⟨0,0⟩) (ofString "Z")) ]
-```
-
-**Level 6 — QClifford** (the physical Clifford + measurement circuit; standard-Z extraction of
-the `prop` via one ancilla):
-
-```text
-[ .X 0,  .prepZero 1,  .CNOT 0 1,  .meas 1 r ]              -- flip the data; read Z through ancilla 1
-```
-
-**The lifted-product encoding.** Replace `CodeDecl.css {…}` with the `liftedProduct` code above:
-levels 0–3 are *unchanged* (they are code-agnostic logical IR), but `q0`'s logical `Z̄` is now the
-code's high-weight logical operator, so the physical levels 4–6 **expand**. The verified
-[end-to-end LOC table](#end-to-end-loc-by-layer) measures exactly this — e.g. `X/Z; measure Z/Z`
-on a toy lifted product `[[15,2]]` is `4` MixedIR ops → `12` QStab instructions → `52` QClifford
-gates over `14` physical qubits, all `#guard`-checked. (No physical LP values are hand-written
-here; the table is the ground truth.)
+**The qLDPC encoding.** Swap `code q as Bare` for a ChainQ bivariate-bicycle declaration —
+`code q as BivariateBicycle { l = 3; m = 3; A = x^2*y + x^2*y^2; B = 1 + x*y^2; params = (18,2,3); }`,
+a real parsed macro ([Compiler/CodeSwitch/QLDPCPapers/ChainQProgram.lean](Compiler/CodeSwitch/QLDPCPapers/ChainQProgram.lean)) — and the logical
+program is unchanged, but `q[0]`'s logical `Z̄` becomes the code's high-weight operator, so the
+physical levels expand. The verified [end-to-end LOC table](#end-to-end-loc-by-layer) measures
+this — e.g. `X/Z; measure Z/Z` on a toy lifted product `[[15,2]]` is 4 Mixed-IR ops → 12 QStab
+instructions → 52 QClifford gates over 14 physical qubits, all `#guard`-checked.
 
 ## Concrete examples for each layer
 
-Each block below is the **actual program / value in that layer's own syntax** — the data, not
-the compiler functions or `by decide` tests. Every value is real and checked in the
-repository; follow each link to its checked source.
+Each block shows the program in that layer's **BNF grammar** (defined in its `Syntax.lean`). Where
+a real text parser exists — the `.lqr` surface front-end and OpenQASM — the text *parses and
+compiles*; elsewhere the BNF is the spec and the link points to the **machine form**: the real,
+checked Lean AST in source.
 
 ### 1 · Logical & Physical — the shared vocabulary
 
-Every IR addresses qubits the same way — a logical block + index — and the physical target uses
-a dense 4-letter Pauli string:
+A logical qubit is `Block '[' Nat ']'`; the physical target uses a dense Pauli string
+`('I'|'X'|'Y'|'Z')+`:
 
-```lean
-⟨0, 0⟩                 -- a LQubit: logical qubit 0 of block 0  (Logical/Basic.lean)
-[.Z, .Z, .I]           -- a physical Pauli string, i.e. "ZZI"   (Physical/Basic.lean)
+```text
+q[0]            // logical qubit 0 of code block q   (LQubit ::= Block '[' Nat ']')
+q3              // a physical qubit (a bare number 3, or tagged q3 — as QStab/QClifford accept)
+ZZI             // a dense physical Pauli string on 3 qubits   (PauliStr)
 ```
 
-→ [Logical/](Logical/README.md) · [Physical/](Physical/README.md)
+→ [Logical/](Logical/README.md) · [Physical/](Physical/README.md) · machine form: `⟨0,0⟩`, `[.Z,.Z,.I]`
 
 ### 2 · ChainQ — declare a QEC code family
 
-Code families are written in ChainQ syntax (`inductive CodeDecl`); each elaborates and
-type-checks (shape, CSS commutation `H_X·H_Zᵀ = 0`, logical-class membership) into a
-validity-carrying `CheckedCSSCode`:
+Code families are declared with the ChainQ `code … as … { … }` **macros** (real parsed surface
+syntax); each elaborates and type-checks (shape, CSS commutation `H_X·H_Zᵀ = 0`, logical-class
+membership) into a validity-carrying code:
 
 ```lean
-CodeDecl.surface 3
-CodeDecl.toric 2
-CodeDecl.bb 3 3 [(0, 0), (1, 0), (0, 2)] [(0, 0), (2, 0), (0, 1)]
-CodeDecl.liftedProduct 3 [[[0], [1]]] 1 2
+-- real parsed macros (Compiler/CodeSwitch/QLDPCPapers/ChainQProgram.lean):
+code q as BivariateBicycle { l = 3; m = 3; A = x^2*y + x^2*y^2; B = 1 + x*y^2; params = (18, 2, 3); }
+code q as LiftedProduct   { ell = 8; rows = 3; cols = 4;
+                            protograph = [[x^2,1,1,x^2],[1,x,x^2,x],[x^2,x,x^3,x^2]];
+                            params = (200, 20, 10); }
+-- surface / toric are CodeDecl kinds built as AST (no `as Surface` macro yet):
+--   machine form: CodeDecl.surface 3,  CodeDecl.toric 2
 ```
 
-→ [ChainQ/Syntax.lean](ChainQ/Syntax.lean) · [ChainQ/](ChainQ/README.md)
+→ [ChainQ/SurfaceSyntax.lean](ChainQ/SurfaceSyntax.lean) · [ChainQ/](ChainQ/README.md) · machine form: `CodeDecl.bb 3 3 …`, `CodeDecl.liftedProduct 8 … 3 4`
 
-### 3 · TypeChecker — logical measurement targets & the capability that admits them
+### 3 · TypeChecker — is a logical measurement legal on this code?
 
-The distinctive judgment is a **proof-carrying capability matcher**: a cross-code joint
-measurement `Z̄ ⊗ Z̄` is rejected unless an installed adapter capability recomputes a valid
-merged-code certificate. The programs are the measurement targets; the capability is its own
-value:
+The distinctive judgment is a **proof-carrying capability matcher**, over the PPM measurement BNF
+(the PPM measurement statement `r ':=' 'M' MTarget`): a cross-code joint measurement `Z̄ ⊗ Z̄` is rejected unless an
+installed adapter capability recomputes a valid merged-code certificate:
 
-```lean
-[(⟨0,0⟩, .Z)]                       -- native single-block Z̄ measurement  (accepted)
-[(⟨0,0⟩, .Z), (⟨1,0⟩, .Z)]          -- cross-code joint Z̄⊗Z̄              (REJECTED with no capability)
-{ kind := .adapterPPM, blocks := [0, 1], ancN := 0,            -- the adapter capability that ADMITS it:
-  connStab := [[false, false, false, false, true, true, false, false]] }
+```text
+c0 := M q[0]↦Z                  // OK: native single-block measurement
+c0 := M q[0]↦Z, r[0]↦Z          // REJECTED: cross-code joint Z̄⊗Z̄ with no capability
+                                //  …admitted once an adapter capability is installed
 ```
 
-→ [TypeChecker/Judgment/PPM/Examples.lean](TypeChecker/Judgment/PPM/Examples.lean) · [TypeChecker/](TypeChecker/README.md)
+→ [TypeChecker/Judgment/PPM/Examples.lean](TypeChecker/Judgment/PPM/Examples.lean) · [TypeChecker/](TypeChecker/README.md) · machine form: the `MTarget` + `Capability` record
 
 ### 4 · Compiler / Mixed IR — a source program and its lowering
 
-A logical source program (`List LogicalOp`) lowers to Mixed IR (`List MixedInstr`). `H; S`
-becomes two direct transversals (and `execMixed`-runs to the same state as the ideal simulator
-— exact-operational equality):
+A `.lqr` / OpenQASM logical program lowers to the Mixed IR. `H; S` becomes two direct transversals
+(and `execMixed`-runs to the same state as the ideal simulator — exact-operational equality). The
+Mixed IR itself has no surface grammar (it is the internal checked AST):
 
-```lean
-[ .hGate ⟨0,0⟩, .sGate ⟨0,0⟩ ]                          -- source program: List LogicalOp
-[ .transversal 0 [[false, true], [true, false]]         -- Mixed IR: H as the X↔Z transversal
-, .transversal 0 [[true, true], [false, true]] ]        --           S as the X↦Y transversal
+```rust
+// .lqr surface program (parses + compiles):
+H q[0]
+S q[0]
+// → lowers to Mixed IR, machine form: [.transversal 0 [[false,true],[true,false]], …]
 ```
 
-→ [Compiler/Demo/Contract.lean](Compiler/Demo/Contract.lean) · [Compiler/Mixed/](Compiler/Mixed/README.md)
+→ [Compiler/Demo/Contract.lean](Compiler/Demo/Contract.lean) · [Compiler/Mixed/](Compiler/Mixed/README.md) · machine form: `[.transversal 0 [[false,true],[true,false]], …]`
 
 ### 5 · ChainQ2Mixed — request ≠ realization (transversal CNOT)
 
-The front-end separates *what* a logical op requests from *how* it is realized. A transversal
-logical CNOT carries its physical incidence; a zero incidence that still claims a logical CNOT
-is rejected (the lifted symplectic map would induce the identity, not the CNOT):
+The front-end separates *what* a logical op requests from *how* it is realized. A `.lqr` `CNOT`
+carries a physical-incidence request (the allocation's `cnotIncidence`); a non-trivial incidence
+realizes a verified transversal CNOT, while a zero incidence that still claims a logical CNOT is
+rejected (the lifted symplectic map would induce the identity, not the CNOT):
 
-```lean
-.transversalCNOT { control := ⟨0,0⟩, target := ⟨1,0⟩, incidence := [[true]] }    -- accepted
-.transversalBatch { controlBlock := 0, targetBlock := 1,                           -- REJECTED:
-                    incidence := [[false]], logicalIncidence := [[true]] }         -- zero incidence ≠ CNOT
+```rust
+CNOT q[0], r[0]      // realized as a transversal logical CNOT when cnotIncidence = [[1]]
+                     // REJECTED when cnotIncidence = [[0]] (zero incidence ≠ a logical CNOT)
 ```
 
-→ [Compiler/ChainQ2Mixed/Primitive.lean](Compiler/ChainQ2Mixed/Primitive.lean) · [Compiler/ChainQ2Mixed/](Compiler/ChainQ2Mixed/README.md)
+→ [Compiler/ChainQ2Mixed/Primitive.lean](Compiler/ChainQ2Mixed/Primitive.lean) · [Compiler/ChainQ2Mixed/](Compiler/ChainQ2Mixed/README.md) · machine form: `.transversalCNOT {…}` / `.transversalBatch {…}`
 
 ### 6 · PPR — logical Pauli-product rotations
 
-The `L_PPR` spec: a program is a sequence of `exp(i φ P)` rotations, each an angle + a Pauli
-product. This program has T-count 2:
+The `L_PPR` spec. BNF: `Rot ::= ('+'|'-') Angle '·' PauliString`, `Angle ::= 'π'|'π/2'|'π/4'|'π/8'`,
+`PauliString ::= (LQubit '↦' Pauli)*`. The `π/8` count is the T-count — this program has T-count 2:
 
-```lean
-⟨⟨false, .piEighth⟩,  [(⟨0,0⟩, .Z)]⟩                       -- a T rotation on qubit 0
-⟨⟨false, .piQuarter⟩, [(⟨0,0⟩, .Z)]⟩                       -- an S rotation on qubit 0
-⟨⟨false, .piEighth⟩,  [(⟨0,0⟩, .Z), (⟨0,1⟩, .Z)]⟩          -- a ZZ rotation on qubits 0,1
--- the program is the list  [ T(q0), S(q0), ZZ(q0,q1) ]
+```text
++π/8 · q[0]↦Z              // a T rotation
++π/4 · q[0]↦Z              // an S rotation
++π/8 · q[0]↦Z q[1]↦Z       // a two-qubit ZZ rotation
 ```
 
-→ [PPR/Syntax.lean](PPR/Syntax.lean) · [PPR/](PPR/README.md)
+→ [PPR/Syntax.lean](PPR/Syntax.lean) · parses today: [PPR/Parse.lean](PPR/Parse.lean) · [PPR/](PPR/README.md) · machine form: `⟨⟨false, .piEighth⟩, [(⟨0,0⟩, .Z)]⟩`
 
 ### 7 · PPM — adaptive Pauli-product measurement (QMeas)
 
-The `L_PPM` measurement language; a measurement target is a one- or two-body logical
-observable (the natively lattice-surgery-realizable alphabet):
+The `L_PPM` measurement language. BNF (the measurement statement — the full `Stmt` also has
+`frame`/`discard`/`if`/`for`/`skip`/`abort`): `S ::= r ':=' 'M' MTarget`,
+`MTarget ::= (LQubit '↦' PLetter)*` — a one- or two-body logical observable (the natively
+lattice-surgery-realizable alphabet). `a` is an ancilla code block:
 
-```lean
-[(dataQ 0, .Z), (ancQ 0, .X)]       -- a valid two-body observable
-[(dataQ 0, .X)]                      -- a valid one-body observable
-[(dataQ 0, .Z), (dataQ 0, .X)]       -- REJECTED: a repeated qubit
+```text
+c0 := M q[0]↦Z, a[0]↦X     // OK: a two-body joint observable
+c1 := M q[0]↦X             // OK: a one-body observable
+c2 := M q[0]↦Z, q[0]↦X     // REJECTED: a repeated qubit
 ```
 
-→ [PPM/Syntax.lean](PPM/Syntax.lean) · [PPM/](PPM/README.md)
+→ [PPM/Syntax.lean](PPM/Syntax.lean) · parses today: [PPM/Parse.lean](PPM/Parse.lean) · [PPM/](PPM/README.md) · machine form: `[(dataQ 0,.Z),(ancQ 0,.X)]`
 
 ### 8 · Code switching — a transparent cross-code coercion
 
-Encoding a bare qubit into the `[[3,1,1]]` repetition code is a switch certificate that
-**preserves the logical operators** (it induces `X̄ = XXX`); a degenerate all-zero map is
-rejected. The certificate is its own value — a kind + the symplectic map `f`:
+Code switching has no surface grammar — it is a **checked certificate** (a kind + a symplectic map
+`f`). Encoding a bare qubit into the `[[3,1,1]]` repetition code **preserves the logical
+operators** (it induces `X̄ = XXX`, `Z̄ = Z₀`); a degenerate all-zero map is rejected:
 
 ```lean
-{ kind := .gaugeFix,                                      -- the switch certificate, with map f:
-  f := [[true,  true,  true,  false, false, false],       --   X̄ ↦ XXX
-        [false, false, false, true,  false, false]] }     --   Z̄ ↦ ZII
--- induced logical X̄ = [[true, true, true, false, false, false]]   (= XXX)
+-- machine form: the SwitchProtocolCert value
+{ kind := .gaugeFix, f := [[true,true,true,false,false,false],   -- X̄ ↦ XXX
+                           [false,false,false,true,false,false]] }  -- Z̄ ↦ Z₀   (OK)
+{ kind := .gaugeFix, f := zeroMat 2 6 }                            -- REJECTED: zero map
 ```
 
-→ [TypeChecker/Judgment/Switch/Examples.lean](TypeChecker/Judgment/Switch/Examples.lean) · [Compiler/CodeSwitch/](Compiler/CodeSwitch/README.md)
+→ [TypeChecker/Judgment/Switch/Examples.lean](TypeChecker/Judgment/Switch/Examples.lean) · [Compiler/CodeSwitch/](Compiler/CodeSwitch/README.md) · machine form: `{kind := .gaugeFix, f := [[…]]}`
 
 ### 9 · MagicQ — magic-state protocols
 
-A magic-state protocol is a list of `ProtocolOp`s. Here is the standard 15-to-1 distillation
-(15 `T` inputs → one output) in MagicQ syntax — the non-Pauli Bravyi–Kitaev A-type syndrome
-stays an explicit deferred obligation, not claimed proven:
+A magic-state protocol is a list of `ProtocolOp`s (no surface grammar yet; rendered top-to-bottom
+below). The standard 15-to-1 distillation (15 `T` inputs → one output) — the non-Pauli
+Bravyi–Kitaev A-type syndrome stays an explicit deferred obligation, not claimed proven:
 
-```lean
-{ name := "rm15_to_1",
-  ops  := <15 × .inject .supplied .T …> ++                            -- 15 supplied noisy T inputs
-          [ .distill15To1 (List.range 15) 15 15 (.external "RM15-[[15,1,3]]")
-              rm15OutQuality ["rm15.z-syndrome", "rm15.eta"],           -- measure the RM-15 syndrome
-            .postselect (.syndromeEq "rm15.eta" false),                 -- keep iff η = 0
-            .output 15 ] }                                              -- return the distilled T
+```text
+-- rendering of the rm15_to_1 Protocol value (machine form: the ProtocolOp list):
+inject     t[0..14] : T           -- 15 supplied noisy T inputs
+distill    t[0..14] -> t : RM15   -- Bravyi–Kitaev [[15,1,3]] distillation
+postselect η == 0                 -- keep iff the A-type syndrome η = 0   (η decoding deferred)
+output     t
 ```
 
-→ [MagicQ/Tests.lean](MagicQ/Tests.lean) · [MagicQ/](MagicQ/README.md)
+→ [MagicQ/Tests.lean](MagicQ/Tests.lean) · [MagicQ/](MagicQ/README.md) · machine form: the `rm15_to_1` `Protocol` value
 
 ### 10 · QStab — physical stabilizer-measurement dataflow
 
-The `L_QStab` target is an SSA-style classical dataflow over physical Pauli measurements
-(`.prop`) and classical parities (`.parity`). A program reads like this — `parity` detectors
-are syndromes, the last `parity` is the logical readout:
+The `L_QStab` target. BNF: `Stmt ::= QVar '=' 'Prop' Sched? PauliStr | QVar '=' 'Parity' QVar+` —
+an SSA-style dataflow of physical Pauli measurements and classical parities (syndrome detectors
+plus a logical readout):
 
-```lean
-[ .prop (some ⟨0,0⟩) (ofString "ZZI"),   -- c0
-  .prop (some ⟨0,1⟩) (ofString "IZZ"),   -- c1
-  .prop (some ⟨1,0⟩) (ofString "ZZI"),   -- c2
-  .parity [0, 2],                          -- d0 = c0 ⊕ c2   (a syndrome detector)
-  .prop (some ⟨1,1⟩) (ofString "IZZ"),   -- c3
-  .parity [1, 4],                          -- d1 = c1 ⊕ c3
-  .prop none (ofString "ZZZ"),            -- c4
-  .parity [6] ]                            -- o0 = c4         (the logical output)
+```text
+c0 = Prop ZZI            -- physical stabilizer measurement
+c1 = Prop IZZ
+c2 = Prop ZZI
+d0 = Parity c0 c2        -- syndrome detector
+c3 = Prop IZZ
+d1 = Parity c1 c3        -- syndrome detector
+c4 = Prop ZZZ            -- logical Z
+o0 = Parity c4           -- logical output
 ```
 
-→ [QStab/Semantics.lean](QStab/Semantics.lean) · [QStab/](QStab/README.md)
+→ [QStab/Syntax.lean](QStab/Syntax.lean) · parses today: [QStab/Parse.lean](QStab/Parse.lean) · [QStab/](QStab/README.md) · machine form: `[.prop …, .parity …]`
 
 ### 11 · QClifford — the physical Clifford + measurement target
 
-The terminal `L_QClifford` IR: a circuit is a list of physical Clifford gates, Z-basis
-measurements, and classically-conditioned Pauli corrections. E.g. `CNOT(0,1)` realized from a
-`CZ` (3 gates, 1 two-qubit):
+The terminal `L_QClifford` IR. BNF: `Gate ::= 'Prep0' q | 'Prep+' q | ('H'|'S'|'X'|'Z') q | 'CNOT' c t
+| 'CZ' a b | 'Meas' q '->' CBit | CBit ':=' 'xor' CBit* | 'If' CBit 'then' Pauli q`. E.g. `CNOT(0,1)` realized from a `CZ`:
 
-```lean
-[ .H 1, .CZ 0 1, .H 1 ]            -- CNOT(0,1) = H · CZ · H
+```text
+H    q1                  -- CNOT q0, q1  =  H · CZ · H
+CZ   q0 q1
+H    q1
 ```
 
-→ [QClifford/Syntax.lean](QClifford/Syntax.lean) · [QClifford/](QClifford/README.md)
+→ [QClifford/Syntax.lean](QClifford/Syntax.lean) · parses today: [QClifford/Parse.lean](QClifford/Parse.lean) · [QClifford/](QClifford/README.md) · machine form: `[.H 1, .CZ 0 1, .H 1]`
 
 ### 12 · QStab → QClifford — the syndrome-extraction pass
 
-Each physical stabilizer `.prop` is extracted by a chosen scheme (standard / destructive /
-Shor / Knill / flag). A standard-Z measurement of `ZZ` on data qubits `{0,1}`, reading into
-result var 7, extracts to this QClifford circuit:
+Each physical stabilizer measurement is extracted by a chosen scheme (standard / destructive /
+Shor / Knill / flag). A standard-Z measurement of `ZZ` on data qubits `{0,1}` extracts to this
+QClifford circuit:
 
-```lean
-[ .prepZero 3, .CNOT 1 3, .CNOT 0 3, .meas 3 7 ]   -- fresh ancilla 3, two CNOTs from the data, one measurement
+```text
+Prep0 q3                 -- fresh |0⟩ ancilla, physical qubit 3
+CNOT  q1 q3
+CNOT  q0 q3
+Meas  q3 -> c7           -- one measurement into result var 7
 ```
 
-→ [Compiler/QStab2QClifford/Basic.lean](Compiler/QStab2QClifford/Basic.lean) · [Compiler/QStab2QClifford/](Compiler/QStab2QClifford/README.md)
+→ [Compiler/QStab2QClifford/Basic.lean](Compiler/QStab2QClifford/Basic.lean) · [Compiler/QStab2QClifford/](Compiler/QStab2QClifford/README.md) · machine form: `[.prepZero 3, .CNOT 1 3, .CNOT 0 3, .meas 3 7]`
 
 ## Public imports
 

@@ -9,3 +9,4 @@ import QStab.Syntax
 import QStab.Semantics
 import QStab.StabilizerProgram
 import QStab.SparsePauli
+import QStab.Parse

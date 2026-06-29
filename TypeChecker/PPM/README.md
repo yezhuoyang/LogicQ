@@ -59,7 +59,31 @@ Current PPM legality rules live under `TypeChecker/Judgment/PPM` and
 ```
 
 (from the previous [README.md](README.md), preserved here as the honest state of
-the directory.) For a real, load-bearing example, the program-checker soundness
+the directory.)
+
+The PPM measurements these checkers vet are the ones produced by the PPM surface
+language (parses today — `PPM/Parse.lean`, by `decide`). A single-body and a
+two-body joint logical measurement, plus a frame and a discard, look like:
+
+```text
+c0 := M q[0]↦Z
+c1 := M q[0]↦Z, a[0]↦X
+frame Z(q[0])
+discard q[0]
+```
+
+Each `c<n> := M …` parses to a `PPM.Stmt.meas r P` with target `P : PPM.MTarget`
+(the `MTarget` value `checkPPM` is handed); e.g. the two-body line above is the
+machine-form AST:
+
+```lean
+PPM.Stmt.meas 1 [(⟨0, 0⟩, .Z), (⟨1, 0⟩, .X)]
+```
+
+Block names map to `Logical.BlockId`s in first-occurrence order (`q ↦ 0`,
+`a ↦ 1`).
+
+For a real, load-bearing example, the program-checker soundness
 theorem in the sibling folder states that every measurement a type-checked
 statement emits passes `checkPPM`:
 

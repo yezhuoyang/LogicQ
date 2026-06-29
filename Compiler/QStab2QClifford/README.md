@@ -64,10 +64,24 @@ theorem compile?_trace_evalVar {cfg : CompileConfig} {p : QStab.Prog} {c : Circu
 
 ## Example
 
-The input is a QStab `Prog` — physical Pauli measurements and classical parities in SSA form. The README readout program ([QStab/Syntax.lean:80](../../QStab/Syntax.lean#L80)) is a distance-3 repetition-style syndrome + logical readout:
+The **source** side of this bridge is a QStab `Prog` — physical Pauli measurements and classical parities in SSA form. QStab has a real text parser (parses today — [QStab/Parse.lean](../../QStab/Parse.lean), `by decide`), so the README readout program ([QStab/Syntax.lean:80](../../QStab/Syntax.lean#L80)) — a distance-3 repetition-style syndrome + logical readout — is written in QStab surface syntax:
+
+```rust
+// QStab source program (the input to this pass) — parses today (QStab/Parse.lean):
+c0 = Prop[r=0,s=0] ZZI     // measure physical Pauli ZZI at round 0, slot 0
+c1 = Prop[r=0,s=1] IZZ
+c2 = Prop[r=1,s=0] ZZI
+d0 = Parity c0 c2          // d0 = c0 ⊕ c2
+c3 = Prop[r=1,s=1] IZZ
+d1 = Parity c1 c3          // d1 = c1 ⊕ c3
+c4 = Prop ZZZ              // scheduling coords optional
+o0 = Parity c4             // o0 = c4
+```
+
+That text parses to exactly the `QStab.progReadout` AST value (the machine form actually passed to this pass) — `QStab.Parse.parsesTo readoutSrc QStab.progReadout = true` ([QStab/Parse.lean:104](../../QStab/Parse.lean#L104)):
 
 ```lean
--- QStab source program (the input to this pass):
+-- QStab.progReadout : QStab.Prog  (the parsed AST — machine form):
 [ .prop (some ⟨0, 0⟩) (ofString "ZZI"),   -- c0
   .prop (some ⟨0, 1⟩) (ofString "IZZ"),   -- c1
   .prop (some ⟨1, 0⟩) (ofString "ZZI"),   -- c2
@@ -78,23 +92,39 @@ The input is a QStab `Prog` — physical Pauli measurements and classical pariti
   .parity [6] ]                            -- o0 = c4
 ```
 
-The extraction schedule is itself pure data — one `ExtractionSpec` per prop. The standard-Z spec `stdZ 3 [1, 0]` (ancilla qubit 3, data qubits 1 then 0) lowers a single prop to the gadget circuit value below — a fresh `|0⟩` ancilla (qubit 3), data qubits 1 and 0 control CNOTs into it, then one measurement into result bit 7. The emitted `QClifford.Circuit` is byte-identical to the pre-M23 pass ([Basic.lean:60](Basic.lean#L60)):
+The extraction schedule is itself pure data — one `ExtractionSpec` per prop. The standard-Z spec `stdZ 3 [1, 0]` (ancilla qubit 3, data qubits 1 then 0) lowers a single prop to the **target** QClifford circuit below — a fresh `|0⟩` ancilla (qubit 3), data qubits 1 and 0 control CNOTs into it, then one measurement into result bit 7. QClifford also has a real text parser (parses today — [QClifford/Parse.lean](../../QClifford/Parse.lean), `by decide`), so the emitted circuit for that prop is written in QClifford surface syntax:
+
+```rust
+// Spec for one prop (this pass's pure data): ExtractionSpec.standardZ [1, 0] 3
+// Emitted QClifford circuit for that prop — parses today (QClifford/Parse.lean):
+Prep0 q3        // fresh |0⟩ ancilla
+CNOT q1 q3      // data qubit 1 → ancilla
+CNOT q0 q3      // data qubit 0 → ancilla
+Meas q3 -> c7   // measure ancilla into result bit 7
+```
+
+That text parses to exactly the emitted `QClifford.Circuit` AST value, byte-identical to the pre-M23 pass ([Basic.lean:61](Basic.lean#L61)) — `QClifford.Parse.parsesTo … [.prepZero 3, .CNOT 1 3, .CNOT 0 3, .meas 3 7] = true` ([QClifford/Parse.lean:115](../../QClifford/Parse.lean#L115)):
 
 ```lean
--- Spec for one prop:           stdZ 3 [1, 0]  =  ExtractionSpec.standardZ [1, 0] 3
--- Emitted QClifford.Circuit (the gadget value) for that prop into result bit 7:
+-- Emitted QClifford.Circuit (the gadget value — machine form):
 [ .prepZero 3,    -- fresh |0⟩ ancilla
   .CNOT 1 3,      -- data qubit 1 → ancilla
   .CNOT 0 3,      -- data qubit 0 → ancilla
   .meas 3 7 ]     -- measure ancilla into result bit 7
 ```
 
-The full program `progReadout` extracted under `repetitionReadoutCfg` (every prop a `stdZ 3 …`) gives a circuit with `measCount = 5` (one per prop) and `parityCount = 3` (`d0`, `d1`, `o0`) ([Basic.lean:56](Basic.lean#L56)). Source: [Basic.lean](Basic.lean) (§1).
+The full program `progReadout` extracted under `repetitionReadoutCfg` (every prop a `stdZ 3 …`) gives a circuit with `measCount = 5` (one per prop) and `parityCount = 3` (`d0`, `d1`, `o0`) ([Basic.lean:57](Basic.lean#L57)). Source: [Basic.lean](Basic.lean) (§1).
 
-The same file exercises the source-semantics bridge end to end. The bridge program is a Knill `ZZ` prop followed by a `Parity` ([Basic.lean:188](Basic.lean#L188)):
+The same file exercises the source-semantics bridge end to end. The bridge program is a Knill `ZZ` prop followed by a `Parity` ([Basic.lean:188](Basic.lean#L188)) — in QStab surface syntax (parses today — [QStab/Parse.lean](../../QStab/Parse.lean)):
+
+```rust
+// The source-bridge program (bridgeProg) — extracted with knillZ [0,1] [2,3]:
+c0 = Prop ZZ        // the Knill ZZ prop (var 0)
+d0 = Parity c0      // a parity of it (var 1)
+```
 
 ```lean
--- The source-bridge program (bridgeProg) — extracted with knillZ [0,1] [2,3]:
+-- bridgeProg : QStab.Prog  (the corresponding AST — machine form):
 [ .prop none (ofString "ZZ"),   -- the Knill ZZ prop (var 0)
   .parity [0] ]                  -- a parity of it (var 1)
 ```

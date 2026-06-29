@@ -57,9 +57,13 @@ the lifted target Pauli is in the span of the merged group.
 
 ## Example
 
-The environment, the measurement targets, and the adapter capability are all DATA. The bare qubit `q0`, the
+The environment, the measurement targets, and the adapter capability are all DATA. A `PPM.MTarget` is the
+machine form of a PPM measurement: the joint `Z̄ ⊗ Z̄` target below is what the PPM surface statement
+`c0 := M q[0]↦Z, r[0]↦Z` parses to — the two distinct block names `q`, `r` intern to block ids 0, 1 in
+first-occurrence order (PPM surface syntax parses today — [PPM/Parse.lean](../../../PPM/Parse.lean)).
+This judgment checks the AST directly; it adds no surface keywords of its own. The bare qubit `q0`, the
 `[[3,1,1]]` repetition code `rep`, and the joint `Z̄ ⊗ Z̄` target `zzTarget`
-([Examples.lean:17](Examples.lean#L17)):
+([Examples.lean:17-31](Examples.lean#L17-L31)):
 
 ```lean
 -- the two data codes that populate the environment:
@@ -71,7 +75,8 @@ def rep : Block :=                                                 -- the [[3,1,
     lx := [[true,  true,  true,  false, false, false]],            -- X̄ = XXX
     lz := [[false, false, false, true,  false, false]] }           -- Z̄ = ZII
 
--- the joint Z̄(block 0) ⊗ Z̄(block 1) lattice-surgery target:
+-- the joint Z̄(block 0) ⊗ Z̄(block 1) lattice-surgery target
+-- (PPM surface form: `c0 := M q[0]↦Z, r[0]↦Z`, with q↦block 0, r↦block 1):
 def zzTarget : PPM.MTarget := [(⟨0, 0⟩, PPM.PLetter.Z), (⟨1, 0⟩, PPM.PLetter.Z)]
 
 -- the adapter capability whose connection stabilizer is the joint Z ⊗ Z₀ operator:
@@ -83,13 +88,17 @@ def zzCap : Capability :=
 Applying `checkPPM` to these values, over the environments `tenvQ = ⟨[q0]⟩` and `tenvQR = ⟨[q0, rep]⟩`:
 
 ```lean
--- env tenvQ = ⟨[q0]⟩, no capabilities:
+-- targets shown as the PPM.MTarget AST; the PPM surface form (parses today,
+-- PPM/Parse.lean) is given alongside each in `c<r> := M …↦…` syntax.
+
+-- env tenvQ = ⟨[q0]⟩, no capabilities — PPM: `c0 := M q[0]↦Z`:
 [(⟨0, 0⟩, PPM.PLetter.Z)]                                  -- OK: single-block Z̄ is native (weight-1)
 
--- env tenvR = ⟨[rep]⟩, no capabilities:
+-- env tenvR = ⟨[rep]⟩, no capabilities — PPM: `c0 := M q[0]↦X`:
 [(⟨0, 0⟩, PPM.PLetter.X)]                                  -- OK: single-block X̄ = XXX is a logical op of rep
 
--- env tenvQR = ⟨[q0, rep]⟩, the DRIVING joint Z̄ ⊗ Z̄ target zzTarget:
+-- env tenvQR = ⟨[q0, rep]⟩, the DRIVING joint Z̄ ⊗ Z̄ target zzTarget
+-- (PPM: `c0 := M q[0]↦Z, r[0]↦Z`):
 [(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z)]   with caps []               -- rejected: cross-code joint PPM, no capability
 [(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z)]   with caps [zzCap]          -- OK: a valid adapter capability supplies the merge
 [(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z)]   with caps [{zzCap with connStab := []}]
@@ -104,13 +113,15 @@ capability has no connection stabilizer. Source: [Examples.lean](Examples.lean).
 The matcher also enforces target shape and row safety; the rejected targets carry a structured `TypeError`:
 
 ```lean
+-- targets as PPM.MTarget AST; PPM surface form (PPM/Parse.lean) noted where one exists.
+
 -- env tenvQ = ⟨[q0]⟩, no capabilities:
-[]                                                         -- rejected: emptyMeasurement (no identity/no-op form)
-[(⟨0, 0⟩, .X), (⟨0, 0⟩, .Z)]                              -- rejected: nonNativeMeasurement (repeats logical qubit ⟨0,0⟩)
-[(⟨0, 5⟩, .Z)]                                            -- rejected: badLogicalIndex 0 5 (out of range, not identity)
+[]                                                         -- rejected: emptyMeasurement (no identity/no-op surface form)
+[(⟨0, 0⟩, .X), (⟨0, 0⟩, .Z)]                              -- PPM `c0 := M q[0]↦X, q[0]↦Z`: rejected nonNativeMeasurement (repeats ⟨0,0⟩)
+[(⟨0, 5⟩, .Z)]                                            -- PPM `c0 := M q[5]↦Z`: rejected badLogicalIndex 0 5 (out of range)
 
 -- env tenvQR = ⟨[q0, rep]⟩, no capabilities:
-[(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z), (⟨1, 0⟩, .X)]               -- rejected: nonNativeMeasurement (>2 factors)
+[(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z), (⟨1, 0⟩, .X)]               -- PPM `c0 := M q[0]↦Z, r[0]↦Z, r[0]↦X`: rejected nonNativeMeasurement (>2 factors)
 ```
 
 A malformed block — a zero-width logical, `badBlk = { n := 1, stab := [], lx := [[]], lz := [[]] }` — is

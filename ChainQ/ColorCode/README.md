@@ -16,7 +16,7 @@ There are currently **no `.lean` modules** in this folder and **no child subdire
 
 None in this folder. For the pattern a future `ColorCode` module is expected to follow, see the sibling families. For example, the Surface family (in [../Surface/README.md](../Surface/README.md)) exposes:
 
-```text
+```lean
 surface d      -- HGP(repOpen d, repOpen d), a concrete CSSCode for fixed d
 surface? d     -- option-returning checked constructor (rejects d < 2)
 mkSurface d    -- checked constructor

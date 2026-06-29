@@ -10,6 +10,7 @@ A PPR program is a sequence of **logical** Pauli-product rotations `exp(i φ P)`
 | --- | --- |
 | [Basic.lean](Basic.lean) | Umbrella module; re-exports `Syntax` and `Semantics` |
 | [Syntax.lean](Syntax.lean) | Pure data: `Pauli`, `PauliString`, `Angle`, `Phase`, `Rot`, `RotProg`, well-formedness and T-count, worked-example gates (`rotT`/`rotS`/`rotZZ`) |
+| [Parse.lean](Parse.lean) | Total text parser `parsePPR : String → Except ParseError RotProg` for the surface syntax; round-trip tests are `by decide` |
 | [Semantics.lean](Semantics.lean) | Mathlib denotation: dense-Pauli monomial matrices, `rotOf`/`Rot.denote`/`RotProg.denote`, and the composition law `denote_append` |
 
 ## Key definitions
@@ -27,7 +28,7 @@ inductive Pauli
 structure Rot where
   phase : Phase
   pauli : PauliString
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, DecidableEq
 ```
 
 ```lean
@@ -75,6 +76,16 @@ def rotZZ (q₁ q₂ : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q₁, .Z), 
 ```
 
 Logical T/S/`ZZ` gates built as concrete `Rot` values; the program above is the literal `RotProg` whose T-count is exactly the two `π/8` rotations and which is well-formed (each axis names a logical qubit at most once). Source: [Syntax.lean](Syntax.lean) (lines 104–117).
+
+The same program has a surface syntax that **parses today** ([Parse.lean](Parse.lean), tests by `decide`). A `Phase` is a sign `+`/`-` and an `Angle` in `π | π/2 | π/4 | π/8`; a `Rot` is `Phase · PauliString`, where a `PauliString` is space-separated `q[i] ↦ P` factors (`P ∈ {X, Y, Z}`); rotations are separated by newlines or `;`. Block names (`q`, `a`, …) are interned to `Logical.BlockId`s in first-occurrence order.
+
+```text
++π/8 · q[0]↦Z              // T   on q[0]      (π/8 ⇒ T-type)
++π/4 · q[0]↦Z              // S   on q[0]      (π/4 ⇒ Clifford)
++π/8 · q[0]↦Z q[1]↦Z      // ZZ  on {q[0],q[1]} (π/8 ⇒ T-type)
+```
+
+This text parses (via `PPR.Parse.parsePPR`) to exactly `[rotT ⟨0,0⟩, rotS ⟨0,0⟩, rotZZ ⟨0,0⟩ ⟨0,1⟩]`, with `tCount = 2` — the same `RotProg` shown in Lean above ([Parse.lean](Parse.lean), lines 93–98).
 
 ## Status & scope
 

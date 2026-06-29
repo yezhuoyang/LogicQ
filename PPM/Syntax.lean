@@ -81,7 +81,7 @@ inductive Stmt
   | seq     (s₁ s₂ : Stmt)
   /-- `abort` — the stuck terminal used for post-selection / cultivation. -/
   | abort
-  deriving Repr, Inhabited
+  deriving Repr, Inhabited, DecidableEq
 
 @[inherit_doc] infixr:60 " ;; " => Stmt.seq
 

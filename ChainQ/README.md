@@ -65,14 +65,41 @@ theorem chainComplex_css (cc : ChainComplex) :
 
 ## Example
 
-These are source-level code-family declarations in ChainQ syntax (`inductive CodeDecl`). Each
-one elaborates and type-checks through `check?` into a `CheckedCSSCode`:
+ChainQ has a real surface syntax for the lifted-product and bivariate-bicycle families:
+the `code <name> as LiftedProduct { … }` and `code <name> as BivariateBicycle { … }`
+macros (parse today — [SurfaceSyntax.lean](SurfaceSyntax.lean)) elaborate to `NamedCodeDecl`,
+and `check?` remains the checked boundary into `CheckedCSSCode`:
 
 ```lean
-CodeDecl.surface 3                                                              -- OK: the d=3 surface code
-CodeDecl.toric 2                                                               -- OK: the d=2 toric code
-CodeDecl.bb 3 3 [(0, 0), (1, 0), (0, 2)] [(0, 0), (2, 0), (0, 1)]             -- OK: a bivariate-bicycle code
-CodeDecl.liftedProduct 3 [[[0], [1]]] 1 2                                      -- OK: ℓ=3, A=[1,x] → an n=15 lifted-product qLDPC code
+-- parses today — ChainQ/SurfaceSyntax.lean (bivariate-bicycle macro)
+code bbCode as BivariateBicycle {
+  l = 3;
+  m = 3;
+  A = x^2*y + x^2*y^2;
+  B = 1 + x*y^2;
+  params = (18, 2, 3);
+}
+
+-- parses today — ChainQ/SurfaceSyntax.lean (lifted-product macro)
+-- protograph is a rows×cols matrix of circulant polynomials in `x` (see CircPoly sugar);
+-- entries are written as 1 / x / x^k / sums, e.g. `1 + x^2`.
+code lpCode as LiftedProduct {
+  ell = 8;
+  rows = 3;
+  cols = 4;
+  protograph = [[1, x, x^2, x^3], [x, x^2, x^3, 1], [x^2, x^3, 1, x]];
+  params = (200, 20, 10);
+}
+```
+
+The `surface` and `toric` families have **no** surface macro — they are written directly as
+the `CodeDecl` AST (machine form). Each declaration below elaborates and type-checks through
+`check?` into a `CheckedCSSCode`:
+
+```lean
+-- machine form (no surface macro) — ChainQ/Syntax.lean : inductive CodeDecl
+CodeDecl.surface 3   -- OK: the d=3 surface code
+CodeDecl.toric 2     -- OK: the d=2 toric code
 ```
 
 A `NamedCodeDecl` additionally carries a claimed `[[n,k,d]]` and a distance profile; the matcher

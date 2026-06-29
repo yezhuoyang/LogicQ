@@ -43,6 +43,35 @@ logical semantics to `PPR.RotProg.denote`.
 
 _Source: this file (`README.md`), prior revision._
 
+As a pass-bridge layer, the two endpoints already have real syntax even though the
+edge between them is empty. For illustration only — nothing here wires them — the
+**source** side is a ChainQ code-family declaration (parses today via the
+`code … as BivariateBicycle { … }` macro in `ChainQ/SurfaceSyntax.lean`):
+
+```lean
+-- ChainQ source: a real BivariateBicycle [[18, 2, 3]] code family.
+code bb as BivariateBicycle {
+  l = 3;
+  m = 3;
+  A = x^2*y + x^2*y^2;
+  B = 1 + x*y^2;
+  params = (18, 2, 3);
+}
+```
+
+and the **target** side is a PPR program — a sequence of logical Pauli-product
+rotations `± Angle · (q[i] ↦ P)*` (parses today via `PPR/Parse.lean`, `by decide`):
+
+```text
++π/8 · q[0]↦Z              -- a logical T on q[0]   (π/8 = non-Clifford)
++π/4 · q[0]↦Z              -- a logical S on q[0]   (π/4 = Clifford)
++π/8 · q[0]↦Z q[1]↦Z       -- a two-qubit ZZ rotation over {q[0], q[1]}
+```
+
+The future pass would consume the former (after the `TypeChecker` validates it) and
+emit a `PPR.RotProg` value of the latter shape, proving a theorem connecting source
+logical semantics to `PPR.RotProg.denote`.
+
 ## Status & scope
 
 - **M (missing / planned):** The `ChainQ -> PPR` pass is unimplemented. There is no

@@ -55,16 +55,31 @@ theorem checkPPMStmt_no_use_after_discard (Γ : TypedEnv) (caps : List Capabilit
 
 ## Example
 
-A PPM program is a `Stmt` (the AST above; `;;` is `Stmt.seq`), checked over the bare-qubit env `tenvQ` (block `0`, one logical qubit `⟨0,0⟩`). The following value pins the dead-set *union* join across an `ite`:
+This checker runs over the PPM `Stmt` AST defined in [`PPM/Syntax.lean`](../../../PPM/Syntax.lean). The straight-line fragment of that AST has a real text parser ([`PPM/Parse.lean`](../../../PPM/Parse.lean) — parses today by `decide`), whose surface forms are:
 
-```lean
--- ite branch UNION: discarding ⟨0,0⟩ in ONE branch marks it dead afterward, so a
--- following frame is rejected (would be ACCEPTED under intersection/empty-join):
-.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)] ;; .ite 0 (.discard ⟨0, 0⟩) .skip ;; .frame ⟨0, 0⟩ .X
--- rejected: useAfterDiscard ⟨0,0⟩ — discarded in one ite branch, then framed
+```text
+c0 := M q[0]↦Z              -- one-body measurement, outcome bound to c0
+c0 := M q[0]↦Z, a[0]↦X      -- two-body joint measurement (q interns to block 0, a to block 1)
+frame Z(q[0])               -- record a Z byproduct frame on q[0]
+discard q[0]                -- retire logical qubit q[0]
+skip                        -- do-nothing
+abort                       -- post-selection terminal
 ```
 
-Discarding `⟨0,0⟩` in only one branch of an `ite` still marks it dead afterward (branch joins take the set *union* of the two branches' dead sets), so the subsequent `frame` on that qubit is rejected as a use-after-discard. This value discriminates the union join from an intersection/empty join. Source: [Examples.lean](Examples.lean).
+Statements are `;`- or newline-separated; block names (`q`, `a`, …) map to block ids in first-occurrence order. The adaptive conditional (`if r = +1 then … else …`) and bounded `for` loops are in the BNF but are NOT yet in the text parser — they remain first-class in the `Stmt` AST only (`.ite` / `.forLoop`), so examples that exercise them are shown in **machine form** (the real Lean `Stmt` AST, where `;;` is `Stmt.seq`).
+
+The checker is exercised over the bare-qubit env `tenvQ` (block `0`, one logical qubit `q[0]` = `⟨0,0⟩`). The following machine-form value pins the dead-set *union* join across an `.ite`:
+
+```lean
+-- ite branch UNION: discarding q[0] in ONE branch marks it dead afterward, so a
+-- following frame is rejected (would be ACCEPTED under intersection/empty-join).
+-- The .meas/.frame parts correspond to the PPM surface `c0 := M q[0]↦Z` and
+-- `frame X(q[0])`; the `.ite` has no surface form yet (machine form only):
+.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)] ;; .ite 0 (.discard ⟨0, 0⟩) .skip ;; .frame ⟨0, 0⟩ .X
+-- rejected: useAfterDiscard 0 0 — discarded in one ite branch, then framed
+```
+
+Discarding `q[0]` (`⟨0,0⟩`) in only one branch of an `.ite` still marks it dead afterward (branch joins take the set *union* of the two branches' dead sets), so the subsequent frame on that qubit is rejected as a use-after-discard. This value discriminates the union join from an intersection/empty join. Source: [Examples.lean](Examples.lean).
 
 ## Status & scope
 

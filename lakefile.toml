@@ -42,5 +42,5 @@ name = "LogicQ"
 # aggregate is still a directly-buildable target (e.g.
 # `lake build Compiler.QStab2QClifford.Basic Compiler.Basic LogicQ.Basic`).
 roots = ["LogicQ.Basic"]
-globs = ["LogicQ.Basic", "Logical.*", "Physical.*", "ChainQ.*", "PPR.*", "PPM.*", "QStab.*", "QClifford.*", "TypeChecker.*", "Compiler.*", "MagicQ.*"]
+globs = ["LogicQ.Basic", "Parsing.*", "Logical.*", "Physical.*", "ChainQ.*", "PPR.*", "PPM.*", "QStab.*", "QClifford.*", "TypeChecker.*", "Compiler.*", "MagicQ.*"]
 moreLeanArgs = ["-M", "8000"]

@@ -7,3 +7,4 @@
 -/
 import QClifford.Syntax
 import QClifford.Semantics
+import QClifford.Parse

@@ -53,38 +53,63 @@ def checkPPMProgram (Γ : TypedEnv) (caps : List Capability) (s : Stmt) :
 
 ## Example
 
-The judgment's input data, in the binary-symplectic syntax it consumes
-([Transversal/Examples.lean](Transversal/Examples.lean)):
+These judgments take **no surface grammar** — they are checks over the binary-symplectic /
+GF(2) representation, so the data is shown in its real Lean AST (the machine form the
+judgment consumes), exactly as in [Transversal/Examples.lean](Transversal/Examples.lean):
 
 ```lean
 -- the single-qubit Hadamard as a 2×2 symplectic (X↔Z):
-hGate : BoolMat := [[false, true], [true, false]]
+def hGate : BoolMat := [[false, true], [true, false]]
 
 -- a single logical qubit, no stabilizers (X̄ = X, Z̄ = Z):
-oneQ : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+def oneQ : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
 
 -- the complete [[3,1,1]] repetition code (Z₀Z₁, Z₁Z₂; X̄ = XXX, Z̄ = Z₀):
-rep3 : Block :=
+def rep3 : Block :=
   { n := 3,
     stab := [[false, false, false, true,  true,  false],
              [false, false, false, false, true,  true ]],
     lx := [[true,  true,  true,  false, false, false]],
     lz := [[false, false, false, true,  false, false]] }
+
+-- wrap the valid blocks into TypedEnvs (the proofs are by decide):
+def toneQ : TypedEnv := ⟨[⟨oneQ, by decide⟩]⟩
+def trep3 : TypedEnv := ⟨[⟨rep3, by decide⟩]⟩
 ```
 
 `checkTransversal Γ b g` succeeds only if the tensor-power of the single-qubit gate `g`
-is symplectic and preserves the block's stabilizers. Feeding the values above:
+is symplectic and preserves the block's stabilizers. Feeding the values above (each line
+is pinned `by decide` in the source):
 
 ```lean
 -- transversal H on oneQ: the tensor power is the symplectic J 1 ( = [[F,T],[T,F]] ),
 -- which preserves the (empty) stabilizer and induces X̄ ↦ Z̄:
-hGate on oneQ   -- OK: induced logical action inducedLX = [[false, true]]  (X̄ ↦ Z̄)
+ok? (checkTransversal toneQ 0 hGate) = true
+(res? (checkTransversal toneQ 0 hGate)).map (·.inducedLX) = some [[false, true]]  -- X̄ ↦ Z̄
 
--- transversal H on the non-self-dual repetition code:
-hGate on rep3   -- rejected: J 3 does not preserve the rep-code stabilizers (Z₀Z₁, Z₁Z₂)
+-- transversal H on the non-self-dual repetition code is rejected
+-- (J 3 does not preserve the rep-code stabilizers Z₀Z₁, Z₁Z₂):
+ok? (checkTransversal trep3 0 hGate) = false
 ```
 
 Source: [Transversal/Examples.lean](Transversal/Examples.lean).
+
+The cross-code logical-Pauli measurement judgment `checkPPM` instead consumes a
+`PPM.MTarget` — the same target denoted by the PPM measurement surface syntax
+(`c0 := M q[0]↦Z, a[0]↦X`, which parses today via [PPM/Parse.lean](../../PPM/Parse.lean)).
+A joint `Z̄ ⊗ Z̄` across two different codes — the target of `c0 := M q[0]↦Z, r[0]↦Z` —
+is the machine value `zzTarget` below; it is rejected with no capability and admitted only
+when an adapter capability supplies a valid merge ([PPM/Examples.lean](PPM/Examples.lean)):
+
+```lean
+-- the joint Z̄(block 0) ⊗ Z̄(block 1) measurement target (machine form of M q[0]↦Z, r[0]↦Z):
+def zzTarget : PPM.MTarget := [(⟨0, 0⟩, PPM.PLetter.Z), (⟨1, 0⟩, PPM.PLetter.Z)]
+
+ok? (checkPPM tenvQR []      zzTarget) = false   -- no capability: cross-code merge rejected
+ok? (checkPPM tenvQR [zzCap] zzTarget) = true    -- valid adapter capability: admitted
+```
+
+Source: [PPM/Examples.lean](PPM/Examples.lean).
 
 ## Status & scope
 

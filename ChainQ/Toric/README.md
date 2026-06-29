@@ -54,15 +54,44 @@ parity-check matrix with `1`s at columns `i` and `(i+1) mod d` in row `i`
 ([Basic.lean:22](Basic.lean#L22), [Checked.lean:33](Checked.lean#L33)):
 
 ```lean
-toric 3 . n      = 18      -- OK: n = 2·3²
-toric 3 . valid  = true    -- OK: Hx · Hzᵀ = 0
-toric 2 . valid  = true    -- OK: Hx · Hzᵀ = 0
+(toric 3).n      = 18      -- OK: n = 2·3²
+(toric 3).valid  = true    -- OK: Hx · Hzᵀ = 0
+(toric 2).valid  = true    -- OK: Hx · Hzᵀ = 0
 
-toric? 2 . isSome = true    -- OK: d ≥ 2 accepted ⇒ some (toric 2)
-toric? 0          = none    -- rejected: d < 2
+(toric? 2).isSome = true   -- OK: d ≥ 2 accepted ⇒ some (toric 2)
+(toric? 0)        = none   -- rejected: d < 2
 
 mkToric 2  -- OK: .ok ⟨toric 2, valid⟩
 mkToric 1  -- rejected: .error (.degenerateParam "toric code needs d ≥ 2")
+```
+
+### Source-level declaration form (machine AST)
+
+Unlike the `BivariateBicycle` / `LiftedProduct` families, the toric family has
+**no `code … as …` surface macro**. The source-level declaration is the raw
+`CodeDecl.toric d` AST constructor ([../Syntax.lean:26](../Syntax.lean#L26)),
+which routes through `CodeDecl.check?` to `mkToric d`. This is the machine form
+(real Lean AST), not a surface grammar:
+
+```lean
+-- toric distance-2 declaration, machine form (ChainQ.CodeDecl)
+CodeDecl.toric 2
+
+-- elaborate + type-check it (parses today via decide — ../Syntax.lean:104)
+example : isOk ((CodeDecl.toric 2).check?) = true := by decide
+```
+
+For comparison, the families that *do* have a parser macro
+([../SurfaceSyntax.lean](../SurfaceSyntax.lean)) are written, e.g., as the real
+`[[18,2,3]]` BivariateBicycle instance:
+
+```lean
+code bb1 as BivariateBicycle {
+  l = 3; m = 3;
+  A = x^2*y + x^2*y^2;
+  B = 1 + x*y^2;
+  params = (18, 2, 3);
+}
 ```
 
 The soundness theorem (stated above): whenever `mkToric d` returns `.ok cc`, the

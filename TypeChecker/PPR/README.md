@@ -20,6 +20,7 @@ documented stub. The PPR IR it is reserved to check lives in the top-level
 | [`PPR/Basic.lean`](../../PPR/Basic.lean) | Umbrella; re-exports the syntax and semantics of `L_PPR`. |
 | [`PPR/Syntax.lean`](../../PPR/Syntax.lean) | Mathlib-free data: `Pauli`, `PauliString`, `Angle`, `Phase`, `Rot`, `RotProg`, plus `wf`/`tCount`. |
 | [`PPR/Semantics.lean`](../../PPR/Semantics.lean) | Denotational semantics: a rotation `exp(i φ P)` as a monomial complex matrix. |
+| [`PPR/Parse.lean`](../../PPR/Parse.lean) | Total text parser: PPR surface syntax → `PPR.RotProg` (parse tests `by decide`). |
 
 ## Key definitions
 
@@ -48,35 +49,54 @@ noncomputable def RotProg.denote (n : Nat) (lay : LQubit → Fin n) (p : RotProg
 
 There is no checker code in this folder to quote. The concrete artifacts are
 the PPR **programs** the IR represents — sequences of logical Pauli-product
-rotations. Each logical gate is one rotation `exp(i φ P)`; these are the actual
-worked values from [`PPR/Syntax.lean`](../../PPR/Syntax.lean#L104):
+rotations. Each logical gate is one rotation `exp(i φ P)`. The PPR IR has a real
+text parser — these surface-syntax forms **parse today** to a `PPR.RotProg`
+(parse tests `by decide`) via [`PPR/Parse.lean`](../../PPR/Parse.lean):
+
+```text
++π/8 · q[0]↦Z              -- a logical T on q[0]: the +π/8 Z-rotation exp(i π/8 Z)  (T-type, π/8)
++π/4 · q[0]↦Z              -- a logical S on q[0]: the +π/4 Z-rotation               (Clifford, π/4)
++π/8 · q[0]↦Z q[1]↦Z       -- a two-qubit π/8 rotation about Z⊗Z over {q[0], q[1]}    (T-type, π/8)
+```
+
+The grammar (from [`PPR/Parse.lean`](../../PPR/Parse.lean)): a phase is `+` or `-`
+followed by one of `π`, `π/2`, `π/4`, `π/8`; a rotation is `Phase · PauliString`
+where the axis is space-separated `q[i]↦P` factors with `P ∈ {X, Y, Z}`; block
+names (`q`, `a`, …) intern to numeric block ids in first-occurrence order;
+rotations are separated by newlines or `;`.
+
+Those forms denote exactly the worked AST values `rotT`, `rotS`, `rotZZ` from
+[`PPR/Syntax.lean`](../../PPR/Syntax.lean#L105) (machine form):
 
 ```lean
--- A logical T on q: the +π/8 Z-rotation exp(i π/8 Z)  (T-type, π/8)
-def rotT (q : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q, .Z)]⟩
--- A logical S on q: the +π/4 Z-rotation             (Clifford, π/4)
-def rotS (q : LQubit) : Rot := ⟨⟨false, .piQuarter⟩, [(q, .Z)]⟩
--- A two-qubit π/8 rotation about Z⊗Z over {q₁,q₂}     (T-type, π/8)
-def rotZZ (q₁ q₂ : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q₁, .Z), (q₂, .Z)]⟩
+-- machine form: the worked Rot values these surface lines parse to
+def rotT (q : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q, .Z)]⟩          -- +π/8 · q[0]↦Z
+def rotS (q : LQubit) : Rot := ⟨⟨false, .piQuarter⟩, [(q, .Z)]⟩         -- +π/4 · q[0]↦Z
+def rotZZ (q₁ q₂ : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q₁, .Z), (q₂, .Z)]⟩  -- +π/8 · q[0]↦Z q[1]↦Z
 ```
 
 A `RotProg` is just a list of these rotations applied left to right. The
 T-count is the number of `π/8` rotations, and the program is well-formed when
 every axis lists at most one factor per logical qubit
-([`PPR/Syntax.lean`](../../PPR/Syntax.lean#L116)):
+([`PPR/Syntax.lean`](../../PPR/Syntax.lean#L117)). The 3-rotation program below
+**parses today** ([`PPR/Parse.lean`](../../PPR/Parse.lean)):
 
-```lean
--- A 3-rotation PPR program over logical qubits ⟨0,0⟩ and ⟨0,1⟩:
-[ rotT ⟨0, 0⟩                  -- +π/8 · (⟨0,0⟩↦Z)
-, rotS ⟨0, 0⟩                  -- +π/4 · (⟨0,0⟩↦Z)
-, rotZZ ⟨0, 0⟩ ⟨0, 1⟩ ]        -- +π/8 · (⟨0,0⟩↦Z, ⟨0,1⟩↦Z)
+```text
++π/8 · q[0]↦Z              -- rotT ⟨0,0⟩   (π/8)
++π/4 · q[0]↦Z              -- rotS ⟨0,0⟩   (π/4, Clifford)
++π/8 · q[0]↦Z q[1]↦Z       -- rotZZ ⟨0,0⟩ ⟨0,1⟩   (π/8)
 -- tCount = 2   (the two π/8 rotations: rotT and rotZZ; rotS is Clifford)
 -- wf     = true (every axis is duplicate-qubit-free)
+```
 
-(rotZZ ⟨0, 0⟩ ⟨0, 1⟩).support = [⟨0, 0⟩, ⟨0, 1⟩]   -- OK: the rotation acts on {⟨0,0⟩, ⟨0,1⟩}
+In the machine-form AST that text denotes (from `PPR/Syntax.lean`):
 
--- A malformed axis (two factors on the same logical qubit):
-[(⟨0, 0⟩, .Z), (⟨0, 0⟩, .X)]   -- rejected: PauliString.wf = false (duplicate logical qubit)
+```lean
+-- machine form: the parsed RotProg over logical qubits ⟨0,0⟩ and ⟨0,1⟩
+[ rotT ⟨0, 0⟩, rotS ⟨0, 0⟩, rotZZ ⟨0, 0⟩ ⟨0, 1⟩ ]
+-- (rotZZ ⟨0, 0⟩ ⟨0, 1⟩).support = [⟨0, 0⟩, ⟨0, 1⟩]   -- acts on {⟨0,0⟩, ⟨0,1⟩}
+-- A malformed axis (two factors on the same logical qubit) is rejected:
+--   [(⟨0, 0⟩, .Z), (⟨0, 0⟩, .X)]   -- PauliString.wf = false (duplicate logical qubit)
 ```
 
 The closest concrete *proved* artifact is the rotation-layer **composition law**
