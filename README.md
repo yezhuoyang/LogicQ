@@ -398,16 +398,44 @@ operators** (it induces `X̄ = XXX`, `Z̄ = Z₀`); a degenerate all-zero map is
 
 ### 9 · MagicQ — magic-state protocols
 
-A magic-state protocol is a list of `ProtocolOp`s (no surface grammar yet; rendered top-to-bottom
-below). The standard 15-to-1 distillation (15 `T` inputs → one output) — the non-Pauli
-Bravyi–Kitaev A-type syndrome stays an explicit deferred obligation, not claimed proven:
+A magic-state protocol is a list of `ProtocolOp`s (rendered top-to-bottom below; each line leads
+with its **op keyword** — the discriminating constructor). The colored pills are the protocol-op
+keyword set:
+
+![inject](https://img.shields.io/badge/inject-1f6feb) ![assumeLogicalCheck](https://img.shields.io/badge/assumeLogicalCheck-6e7681) ![grow](https://img.shields.io/badge/grow-2ea44f) ![stabilize](https://img.shields.io/badge/stabilize-3fb950) ![graft](https://img.shields.io/badge/graft-8957e5) ![transitionToMatchable](https://img.shields.io/badge/transitionToMatchable-a371f7) ![postselect](https://img.shields.io/badge/postselect-d29922) ![distill15To1](https://img.shields.io/badge/distill15To1-bf8700) ![output](https://img.shields.io/badge/output-da3633)
+
+**Magic-state cultivation** (Gidney–Shutty–Jones, [2409.17595](https://arxiv.org/abs/2409.17595)) — a
+*live-carrier* protocol that grows one cheap `T` state through **inject → check → grow → stabilize →
+escape**, threading a single carrier `0`. The non-Pauli `H_XY` double-check, the growth fault
+distance, and the escape decoder gap stay **explicit deferred obligations**, never claimed proven:
 
 ```text
--- rendering of the rm15_to_1 Protocol value (machine form: the ProtocolOp list):
-inject     t[0..14] : T           -- 15 supplied noisy T inputs
-distill    t[0..14] -> t : RM15   -- Bravyi–Kitaev [[15,1,3]] distillation
-postselect η == 0                 -- keep iff the A-type syndrome η = 0   (η decoding deferred)
-output     t
+-- the cultivate_T Protocol value (MagicQ/Library/Cultivation.lean), default spec d1=5, d2=15:
+inject                 T -> carrier 0  in ColorCode(3)                 -- unitary injection of encoded |T⟩
+assumeLogicalCheck     carrier 0  H_XY  @ "double-check"               -- non-Pauli (X+Y)/√2 T-check (DEFERRED)
+postselect             all-detectors                                  -- early-stage FULL postselection
+grow                   carrier 0 -> ColorCode(d1=5)   faultDistance 5 @ "grow.bell-boundary"
+stabilize              carrier 0  superdense × 3       @ "stabilize.superdense"
+graft                  carrier 0 -> Grafted(d2=15)    codeDistance 15 @ "escape.graft"
+stabilize              carrier 0  rounds 5             @ "escape.idle-grafted"     -- r1 grafted-code rounds
+transitionToMatchable  carrier 0 -> Matchable(d2=15)  codeDistance 15 @ "escape.transition"
+stabilize              carrier 0  rounds 5             @ "escape.idle-matchable"   -- r2 matchable rounds
+postselect             detectors @ "escape.transition"
+postselect             decoderGap "gap ≥ Δ"                            -- kept iff decoder gap ≥ threshold (DEFERRED)
+output                 resource 0                                      -- cultivated |T⟩: faultDistance ≥ 5, codeDistance 15
+```
+
+→ [MagicQ/Library/Cultivation.lean](MagicQ/Library/Cultivation.lean) · [MagicQ/](MagicQ/README.md) · machine form: the `cultivateT` / `defaultT` `Protocol` value
+
+**Standard 15-to-1 distillation** (15 `T` inputs → one output) — the non-Pauli Bravyi–Kitaev A-type
+syndrome `η` stays a deferred obligation:
+
+```text
+-- the rm15_to_1 Protocol value (MagicQ/Library/ReedMuller15.lean):
+inject       t[0..14] : T          -- 15 supplied noisy T inputs (15× inject)
+distill15To1 t[0..14] -> t : RM15  -- Bravyi–Kitaev [[15,1,3]] distillation
+postselect   η == 0                -- keep iff the A-type syndrome η = 0   (η decoding deferred)
+output       t
 ```
 
 → [MagicQ/Tests.lean](MagicQ/Tests.lean) · [MagicQ/](MagicQ/README.md) · machine form: the `rm15_to_1` `Protocol` value
