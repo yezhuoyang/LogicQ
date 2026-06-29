@@ -2,13 +2,16 @@
   Compiler.QASM.Physical -- QASM front-end through the first checked physical slice.
 
   This module wires the existing QASM allocation/MixedIR front-end into the checked
-  MixedIR -> QStab structural compiler and then into QClifford extraction circuits.
+  MixedIR -> QStab structural compiler, prepends one stabilizer-extraction pass for
+  every resident code block, and then emits QClifford extraction circuits.
 
   HONEST SCOPE.  This is a real end-to-end path for the currently verified structural
-  stabilizer fragment: logical Paulis, transversal H/S, verified transversal CNOTs, and
-  straight-line logical Pauli measurements.  It intentionally rejects `.magic`,
-  `.switch`, scheduled/controlled PPM, automorphisms without chunks, and parallel PPM
-  instead of fabricating a physical circuit.
+  stabilizer fragment: one round of code-stabilizer extraction, logical Paulis,
+  transversal H/S, verified transversal CNOTs, and straight-line logical Pauli
+  measurements.  Repeated syndrome rounds, decoding, padding, and magic-state injection
+  are still deferred.  It intentionally rejects `.magic`, `.switch`, scheduled/controlled
+  PPM, automorphisms without chunks, and parallel PPM instead of fabricating a physical
+  circuit.
 -/
 import Compiler.QASM.Parse
 import Compiler.Verification.Compile
@@ -73,6 +76,78 @@ def contiguousPlacementsFrom : Nat -> Nat -> List TypedBlock -> List (Nat × Nat
 /-- The default logical-block layout used by the QASM physical compiler. -/
 def contiguousLayoutOfEnv (Γ : TypedEnv) : PhysLayout :=
   { placements := contiguousPlacementsFrom 0 0 Γ.blocks }
+
+/-! ## One checked syndrome-extraction envelope. -/
+
+def globalContribsToDense (N : Nat) (contribs : List (Nat × Bool × Bool)) :
+    QStab.PauliString :=
+  (List.range N).map (fun g =>
+    match contribs.find? (fun c => c.1 == g) with
+    | some (_, x, z) =>
+        match x, z with
+        | true,  true  => Physical.Pauli.Y
+        | true,  false => Physical.Pauli.X
+        | false, true  => Physical.Pauli.Z
+        | false, false => Physical.Pauli.I
+    | none => Physical.Pauli.I)
+
+def stabilizerRowToGlobalProp? (L : PhysLayout) (b n : Nat)
+    (row : ChainQ.GF2.BoolVec) : Except PhysicalCompileError QStab.PauliString := do
+  let contribs <- liftVerificationPhysical (placeLocals L b n row (List.range n))
+  let P := globalContribsToDense L.size contribs
+  if (Compiler.QStab2QClifford.supportOf P).isEmpty then
+    .error (.unsupported "cannot extract an identity stabilizer row")
+  else
+    return P
+
+def syndromeRowsFromBlock? (L : PhysLayout) (b n : Nat) :
+    Nat -> List ChainQ.GF2.BoolVec -> Except PhysicalCompileError (QStab.StabilizerProg × Nat)
+  | slot, [] => .ok ([], slot)
+  | slot, row :: rest => do
+      let P <- stabilizerRowToGlobalProp? L b n row
+      let (tail, next) <- syndromeRowsFromBlock? L b n (slot + 1) rest
+      return (QStab.StabilizerInstr.bind
+        (.prop (some { round := 0, slot := slot }) P) :: tail, next)
+
+def syndromeRoundFromBlocks? (Γ : TypedEnv) (L : PhysLayout) :
+    Nat -> Nat -> List TypedBlock -> Except PhysicalCompileError (QStab.StabilizerProg × Nat)
+  | _, slot, [] => .ok ([], slot)
+  | b, slot, tb :: rest => do
+      liftVerificationPhysical (requireLayoutCoversBlock Γ L b)
+      let (here, slot') <- syndromeRowsFromBlock? L b tb.block.n slot tb.block.stab
+      let (more, slot'') <- syndromeRoundFromBlocks? Γ L (b + 1) slot' rest
+      return (here ++ more, slot'')
+
+/-- One round of physical stabilizer checks for every resident typed block.  This is
+    intentionally only one checked envelope round; repeated rounds and decoding remain
+    separate fault-tolerance work. -/
+def syndromeRoundFromEnv? (Γ : TypedEnv) (L : PhysLayout) :
+    Except PhysicalCompileError QStab.StabilizerProg :=
+  if !L.wf then
+    .error (.verification (.layoutError "physical layout is malformed (duplicate block id or destination)"))
+  else do
+    let (prog, _) <- syndromeRoundFromBlocks? Γ L 0 0 Γ.blocks
+    return prog
+
+def shiftStmtQVars (k : Nat) : QStab.Stmt -> QStab.Stmt
+  | .prop sched P => .prop sched P
+  | .parity srcs  => .parity (srcs.map (fun v => v + k))
+
+def shiftStabilizerInstrQVars (k : Nat) : QStab.StabilizerInstr -> QStab.StabilizerInstr
+  | .bind stmt        => .bind (shiftStmtQVars k stmt)
+  | .prepZero q       => .prepZero q
+  | .prepPlus q       => .prepPlus q
+  | .H q              => .H q
+  | .S q              => .S q
+  | .X q              => .X q
+  | .Z q              => .Z q
+  | .CNOT c t         => .CNOT c t
+  | .CZ a b           => .CZ a b
+  | .ifPauli src p q  => .ifPauli (src + k) p q
+
+def shiftStabilizerProgQVars (k : Nat) (prog : QStab.StabilizerProg) :
+    QStab.StabilizerProg :=
+  prog.map (shiftStabilizerInstrQVars k)
 
 /-! ## QStab stabilizer program -> QClifford circuit. -/
 
@@ -175,6 +250,8 @@ structure QASMPhysicalArtifact (ws : List CapabilityWitness) where
   qasm      : QASMArtifact ws
   mixed     : LogicalExec
   layout    : PhysLayout
+  syndrome  : QStab.StabilizerProg
+  logicalQStab : QStab.StabilizerProg
   qstab     : QStab.StabilizerProg
   extractionConfig : Compiler.QStab2QClifford.CompileConfig
   qclifford : QClifford.Circuit
@@ -185,14 +262,18 @@ def compileQASMToQClifford? (ws : List CapabilityWitness) (prog : QASMProgram)
   let mixed <- qasm.logicalExec?
   let layout := contiguousLayoutOfEnv qasm.compiled.ctxIn.env
   let caps := ws.map CapabilityWitness.toCapability
-  let qstab <- liftVerificationPhysical
+  let logicalQStab <- liftVerificationPhysical
     (compileAndVerifyDirectMixedProgQStab qasm.compiled.ctxIn.env caps layout mixed)
+  let syndrome <- syndromeRoundFromEnv? qasm.compiled.ctxIn.env layout
+  let qstab := syndrome ++ shiftStabilizerProgQVars syndrome.dataflow.length logicalQStab
   let cfg <- defaultExtractionConfig? qstab
   let qclifford <- liftQCliffordPhysical (compileStabilizerToQClifford? cfg qstab)
   return {
     qasm := qasm,
     mixed := mixed,
     layout := layout,
+    syndrome := syndrome,
+    logicalQStab := logicalQStab,
     qstab := qstab,
     extractionConfig := cfg,
     qclifford := qclifford }

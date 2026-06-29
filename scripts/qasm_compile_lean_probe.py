@@ -7,9 +7,10 @@ disk, allocates one separated bare ChainQ logical block per virtual qubit, and c
 either `compileOpenQASM2ToMixIR?` or `compileOpenQASM2ToQClifford?`.
 
 The default `--stage physical` is the honest full currently-wired path:
-QASM -> allocation -> checked MixedIR -> verified structural QStab -> QClifford
-extraction. T/magic, code switching, and non-structural PPM are reported as physical
-blockers rather than silently accepted.
+QASM -> allocation -> checked MixedIR -> verified structural QStab plus one
+resident-code stabilizer extraction pass -> QClifford extraction. T/magic, code
+switching, repeated syndrome rounds/decoding, and non-structural PPM are reported
+as physical blockers/deferred work rather than silently accepted.
 
 Example:
 
@@ -66,17 +67,22 @@ def separatedBareRequest (n : Nat) : AllocationRequest :=
     cnotMode := .strictTransversal,
     cnotIncidence := some [[true]] }}
 
+def parsedQASMOpCount (src : String) : Nat :=
+  match parseOpenQASM2? src with
+  | .ok p => p.opCount
+  | .error _ => 0
+
 def runMixed (path : String) (qubits : Nat) (src : String) : IO Unit := do
   match compileOpenQASM2ToMixIR? [] src (separatedBareRequest qubits) with
   | .ok a =>
-      IO.println s!"ok_mixedir\\t{{path}}\\tqubits={{qubits}}\\tops={{a.alloc.prog.ops.length}}\\tmeas={{a.alloc.measMap.length}}\\tobligations={{a.obligations.length}}"
+      IO.println s!"ok_mixedir\\t{{path}}\\tqubits={{qubits}}\\tqasm_ops={{parsedQASMOpCount src}}\\tlogicq_ops={{a.alloc.prog.ops.length}}\\tmixed_steps={{a.compiled.steps.length}}\\tmeas={{a.alloc.measMap.length}}\\tobligations={{a.obligations.length}}"
   | .error e =>
       IO.println s!"error_mixedir\\t{{path}}\\tqubits={{qubits}}\\t{{repr e}}"
 
 def runPhysical (path : String) (qubits : Nat) (src : String) : IO Unit := do
   match compileOpenQASM2ToQClifford? [] src (separatedBareRequest qubits) with
   | .ok a =>
-      IO.println s!"ok_physical\\t{{path}}\\tqubits={{qubits}}\\tmixed_ops={{a.qasm.alloc.prog.ops.length}}\\tqstab_instr={{a.qstab.length}}\\tqclifford_gates={{QClifford.Circuit.gateCount a.qclifford}}\\twidth={{QClifford.Circuit.width a.qclifford}}\\tmeas={{QClifford.Circuit.measCount a.qclifford}}\\ttwoq={{QClifford.Circuit.twoQubitCount a.qclifford}}\\tobligations={{a.qasm.obligations.length}}"
+      IO.println s!"ok_physical\\t{{path}}\\tqubits={{qubits}}\\tqasm_ops={{parsedQASMOpCount src}}\\tlogicq_ops={{a.qasm.alloc.prog.ops.length}}\\tmixed_steps={{a.mixed.length}}\\tsyndrome_instr={{a.syndrome.length}}\\tlogical_qstab_instr={{a.logicalQStab.length}}\\tqstab_instr={{a.qstab.length}}\\tqclifford_gates={{QClifford.Circuit.gateCount a.qclifford}}\\twidth={{QClifford.Circuit.width a.qclifford}}\\tmeas={{QClifford.Circuit.measCount a.qclifford}}\\ttwoq={{QClifford.Circuit.twoQubitCount a.qclifford}}\\tobligations={{a.qasm.obligations.length}}"
   | .error e =>
       IO.println s!"error_physical\\t{{path}}\\tqubits={{qubits}}\\t{{repr e}}"
 

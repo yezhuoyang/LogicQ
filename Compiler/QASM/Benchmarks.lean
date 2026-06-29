@@ -34,6 +34,9 @@ structure BlockedCase where
 
 def logicalName (pref : String) (i : Nat) : String := pref ++ toString i
 
+def logicalNames (pref : String) (n : Nat) : List String :=
+  (List.range n).map (logicalName pref)
+
 /-- Logical-box variant A: one one-logical bare ChainQ block per QASM virtual qubit. -/
 def separatedBareDecl (i : Nat) : ChainQ.NamedCodeDecl :=
   { ChainQ.indexedBareDecl with name := logicalName "q" i }
@@ -92,6 +95,66 @@ def compilesPhysicallyWithSeparatedBare (b : BenchCase) : Bool :=
 
 def tMagicBench (b : BenchCase) : Bool :=
   b.name == "teleportation_n3" || b.name == "qec_en_n5"
+
+/-- Executable "LOC" at each compiler layer: one instruction / IR node / final gate per line.
+    `qasm` is the parsed executable instruction count after exact alias expansion and after
+    barriers are ignored. -/
+structure LayerLOC where
+  qasm       : Nat
+  logicq     : Nat
+  mixed      : Nat
+  syndrome   : Nat
+  logicalQStab : Nat
+  qstab      : Nat
+  qclifford  : Nat
+  width      : Nat
+  meas       : Nat
+  twoQubit   : Nat
+  deriving DecidableEq, Repr
+
+def physicalLayerLOC {ws : List Compiler.CodeSwitch.CapabilityWitness} (qasmOps : Nat)
+    (a : QASMPhysicalArtifact ws) : LayerLOC :=
+  { qasm      := qasmOps,
+    logicq    := a.qasm.alloc.prog.ops.length,
+    mixed     := a.mixed.length,
+    syndrome  := a.syndrome.length,
+    logicalQStab := a.logicalQStab.length,
+    qstab     := a.qstab.length,
+    qclifford := QClifford.Circuit.gateCount a.qclifford,
+    width     := QClifford.Circuit.width a.qclifford,
+    meas      := QClifford.Circuit.measCount a.qclifford,
+    twoQubit  := QClifford.Circuit.twoQubitCount a.qclifford }
+
+def physicalLOCOfProgram? (prog : QASMProgram) (req : AllocationRequest) :
+    Except PhysicalCompileError LayerLOC := do
+  let a <- compileQASMToQClifford? [] prog req
+  return physicalLayerLOC prog.opCount a
+
+def physicalLOCOfSource? (src : String) (req : AllocationRequest) :
+    Except PhysicalCompileError LayerLOC :=
+  match parseOpenQASM2? src with
+  | .error e => .error (.parse e)
+  | .ok prog => physicalLOCOfProgram? prog req
+
+def sourceLOCMatches (src : String) (req : AllocationRequest) (expected : LayerLOC) : Bool :=
+  match physicalLOCOfSource? src req with
+  | .ok got => decide (got = expected)
+  | .error _ => false
+
+def programLOCMatches (prog : QASMProgram) (req : AllocationRequest) (expected : LayerLOC) : Bool :=
+  match physicalLOCOfProgram? prog req with
+  | .ok got => decide (got = expected)
+  | .error _ => false
+
+def envStabilizerCount (Γ : TypeChecker.TypedEnv) : Nat :=
+  Γ.blocks.foldl (fun n tb => n + tb.block.stab.length) 0
+
+def syndromeEnvelopeMatches (prog : QASMProgram) (req : AllocationRequest) : Bool :=
+  match compileQASMToQClifford? [] prog req with
+  | .ok a =>
+      a.syndrome.length == envStabilizerCount a.qasm.compiled.ctxIn.env &&
+      a.qstab.length == a.syndrome.length + a.logicalQStab.length
+  | .error _ => false
 
 /-- The positive QASMBench suite: raw QASM sources that compile end-to-end today. -/
 def positiveSuite : List BenchCase := [
@@ -1313,6 +1376,375 @@ def blockedSuite : List BlockedCase := [
     blocker := "cu1 controlled arbitrary phase" },
 ]
 
+/-- Exact per-layer LOC expectations for physical no-magic QASMBench cases under the
+    separated-bare setup.  The bare setup maps each logical qubit to one physical qubit, so
+    these rows intentionally exercise pipeline preservation more than code-distance blowup. -/
+def physicalLOCExpectations : List (String × LayerLOC) := [
+  ("qrng_n4",        { qasm := 8, logicq := 8, mixed := 8, syndrome := 0, logicalQStab := 8, qstab := 8, qclifford := 8, width := 4, meas := 4, twoQubit := 0 }),
+  ("deutsch_n2",     { qasm := 7, logicq := 7, mixed := 7, syndrome := 0, logicalQStab := 7, qstab := 7, qclifford := 7, width := 2, meas := 2, twoQubit := 1 }),
+  ("iswap_n2",       { qasm := 11, logicq := 11, mixed := 11, syndrome := 0, logicalQStab := 11, qstab := 11, qclifford := 11, width := 2, meas := 2, twoQubit := 2 }),
+  ("cat_state_n4",   { qasm := 8, logicq := 8, mixed := 8, syndrome := 0, logicalQStab := 8, qstab := 8, qclifford := 8, width := 4, meas := 4, twoQubit := 3 }),
+  ("grover_n2",      { qasm := 18, logicq := 18, mixed := 18, syndrome := 0, logicalQStab := 18, qstab := 18, qclifford := 18, width := 2, meas := 2, twoQubit := 2 }),
+  ("lpn_n5",         { qasm := 16, logicq := 16, mixed := 16, syndrome := 0, logicalQStab := 16, qstab := 16, qclifford := 16, width := 5, meas := 5, twoQubit := 2 }),
+  ("hs4_n4",         { qasm := 32, logicq := 32, mixed := 32, syndrome := 0, logicalQStab := 32, qstab := 32, qclifford := 32, width := 4, meas := 4, twoQubit := 4 }),
+  ("bb84_n8",        { qasm := 43, logicq := 43, mixed := 43, syndrome := 0, logicalQStab := 43, qstab := 43, qclifford := 43, width := 8, meas := 16, twoQubit := 0 }),
+  ("qec9xz_n17",     { qasm := 61, logicq := 61, mixed := 61, syndrome := 0, logicalQStab := 61, qstab := 61, qclifford := 61, width := 17, meas := 8, twoQubit := 32 }),
+  ("cat_state_n22",  { qasm := 44, logicq := 44, mixed := 44, syndrome := 0, logicalQStab := 44, qstab := 44, qclifford := 44, width := 22, meas := 22, twoQubit := 21 }),
+  ("ghz_state_n23",  { qasm := 46, logicq := 46, mixed := 46, syndrome := 0, logicalQStab := 46, qstab := 46, qclifford := 46, width := 23, meas := 23, twoQubit := 22 }),
+  ("bv_n14",         { qasm := 54, logicq := 54, mixed := 54, syndrome := 0, logicalQStab := 54, qstab := 54, qclifford := 54, width := 14, meas := 13, twoQubit := 13 }),
+  ("bv_n19",         { qasm := 74, logicq := 74, mixed := 74, syndrome := 0, logicalQStab := 74, qstab := 74, qclifford := 74, width := 19, meas := 18, twoQubit := 18 }),
+  ("cat_n35",        { qasm := 70, logicq := 70, mixed := 70, syndrome := 0, logicalQStab := 70, qstab := 70, qclifford := 70, width := 35, meas := 35, twoQubit := 34 }),
+  ("ghz_n40",        { qasm := 80, logicq := 80, mixed := 80, syndrome := 0, logicalQStab := 80, qstab := 80, qclifford := 80, width := 40, meas := 40, twoQubit := 39 }),
+  ("bv_n30",         { qasm := 107, logicq := 107, mixed := 107, syndrome := 0, logicalQStab := 107, qstab := 107, qclifford := 107, width := 30, meas := 29, twoQubit := 18 }),
+  ("cat_n65",        { qasm := 130, logicq := 130, mixed := 130, syndrome := 0, logicalQStab := 130, qstab := 130, qclifford := 130, width := 65, meas := 65, twoQubit := 64 }),
+  ("ghz_n78",        { qasm := 156, logicq := 156, mixed := 156, syndrome := 0, logicalQStab := 156, qstab := 156, qclifford := 156, width := 78, meas := 78, twoQubit := 77 })
+]
+
+def benchByName? (name : String) : Option BenchCase :=
+  positiveSuite.find? (fun b => b.name == name)
+
+def benchLOCMatches (row : String × LayerLOC) : Bool :=
+  match benchByName? row.1 with
+  | some b => sourceLOCMatches b.qasm (separatedBareRequest b.qubits) row.2
+  | none => false
+
+/-- Larger direct-QASMBench separated-bare smoke rows.
+
+These are separated-bare logical-box runs: they verify parser/allocation/lowering/QClifford
+plumbing on nontrivial source programs, but intentionally do not claim code-distance expansion. -/
+def qasmBenchShowcaseLOC : List (String × LayerLOC) := [
+  ("cat_state_n4",
+    { qasm := 8, logicq := 8, mixed := 8, syndrome := 0, logicalQStab := 8,
+      qstab := 8, qclifford := 8, width := 4, meas := 4, twoQubit := 3 }),
+  ("hs4_n4",
+    { qasm := 32, logicq := 32, mixed := 32, syndrome := 0, logicalQStab := 32,
+      qstab := 32, qclifford := 32, width := 4, meas := 4, twoQubit := 4 }),
+  ("qec9xz_n17",
+    { qasm := 61, logicq := 61, mixed := 61, syndrome := 0, logicalQStab := 61,
+      qstab := 61, qclifford := 61, width := 17, meas := 8, twoQubit := 32 }),
+  ("bv_n30",
+    { qasm := 107, logicq := 107, mixed := 107, syndrome := 0, logicalQStab := 107,
+      qstab := 107, qclifford := 107, width := 30, meas := 29, twoQubit := 18 }),
+  ("cat_n65",
+    { qasm := 130, logicq := 130, mixed := 130, syndrome := 0, logicalQStab := 130,
+      qstab := 130, qclifford := 130, width := 65, meas := 65, twoQubit := 64 }),
+  ("ghz_n78",
+    { qasm := 156, logicq := 156, mixed := 156, syndrome := 0, logicalQStab := 156,
+      qstab := 156, qclifford := 156, width := 78, meas := 78, twoQubit := 77 })
+]
+
+/-! ## Encoded QASMBench fixtures: actual Steane `[[7,1,3]]` blocks. -/
+
+/-- A standard self-dual Hamming parity check for the Steane `[[7,1,3]]` CSS code. -/
+def steaneH : ChainQ.GF2.BoolMat :=
+  [ [true, true, true, false, true, false, false],
+    [true, true, false, true, false, true, false],
+    [true, false, true, true, false, false, true] ]
+
+def steaneCode : ChainQ.CSSCode := { n := 7, hx := steaneH, hz := steaneH }
+
+def steaneIndexSpec : ChainQ.LogicalIndexSpec :=
+  { names := ["data"],
+    pauliBasis := { zBasis := [[true, true, true, true, true, true, true]],
+                    xDualBasis := [[true, true, true, true, true, true, true]] } }
+
+def steaneDecl (name : String) : ChainQ.NamedCodeDecl :=
+  { name := name, decl := .css steaneCode, logicalIndex := some steaneIndexSpec }
+
+def separatedSteaneRequest (n : Nat) : AllocationRequest :=
+  { decls := (List.range n).map (fun i => steaneDecl (logicalName "st" i)),
+    dataLogicals := (List.range n).map
+      (fun i => { code := logicalName "st" i, logical := "data" }),
+    ancillas := [],
+    cnotMode := .strictTransversal,
+    cnotIncidence := some (idMat 7) }
+
+def compilesPhysicallyWithSteane (b : BenchCase) : Bool :=
+  ok? (compileOpenQASM2ToQClifford? [] b.qasm (separatedSteaneRequest b.qubits))
+
+def steaneBenchLOCMatches (row : String × LayerLOC) : Bool :=
+  match benchByName? row.1 with
+  | some b => sourceLOCMatches b.qasm (separatedSteaneRequest b.qubits) row.2
+  | none => false
+
+/-- Exact per-layer LOC for QASMBench programs encoded into one Steane block per virtual qubit.
+
+These are real encoded-code runs: ChainQ checks the Steane CSS code and logical basis, allocation
+maps each QASM virtual qubit to a Steane logical, logical H/CX lower to transversal physical
+operations, measurements lower through logical-Pauli representatives, a full resident-code
+stabilizer pass is prepended, and the result is extracted to QClifford. -/
+def steaneEncodedLOCExpectations : List (String × LayerLOC) := [
+  ("qrng_n4",
+    { qasm := 8, logicq := 8, mixed := 8, syndrome := 24, logicalQStab := 32,
+      qstab := 56, qclifford := 220, width := 56, meas := 28, twoQubit := 124 }),
+  ("deutsch_n2",
+    { qasm := 7, logicq := 7, mixed := 7, syndrome := 12, logicalQStab := 37,
+      qstab := 49, qclifford := 131, width := 28, meas := 14, twoQubit := 69 }),
+  ("iswap_n2",
+    { qasm := 11, logicq := 11, mixed := 11, syndrome := 12, logicalQStab := 65,
+      qstab := 77, qclifford := 159, width := 28, meas := 14, twoQubit := 76 }),
+  ("cat_state_n4",
+    { qasm := 8, logicq := 8, mixed := 8, syndrome := 24, logicalQStab := 32,
+      qstab := 56, qclifford := 220, width := 56, meas := 28, twoQubit := 145 }),
+  ("grover_n2",
+    { qasm := 18, logicq := 18, mixed := 18, syndrome := 12, logicalQStab := 114,
+      qstab := 126, qclifford := 208, width := 28, meas := 14, twoQubit := 76 }),
+  ("lpn_n5",
+    { qasm := 16, logicq := 16, mixed := 16, syndrome := 30, logicalQStab := 82,
+      qstab := 112, qclifford := 317, width := 70, meas := 35, twoQubit := 169 }),
+  ("hs4_n4",
+    { qasm := 32, logicq := 32, mixed := 32, syndrome := 24, logicalQStab := 200,
+      qstab := 224, qclifford := 388, width := 56, meas := 28, twoQubit := 152 }),
+  ("bb84_n8",
+    { qasm := 43, logicq := 43, mixed := 43, syndrome := 48, logicalQStab := 205,
+      qstab := 253, qclifford := 645, width := 120, meas := 64, twoQubit := 304 }),
+  ("qec9xz_n17",
+    { qasm := 61, logicq := 61, mixed := 61, syndrome := 102, logicalQStab := 379,
+      qstab := 481, qclifford := 1106, width := 229, meas := 110, twoQubit := 688 }),
+  ("cat_state_n22",
+    { qasm := 44, logicq := 44, mixed := 44, syndrome := 132, logicalQStab := 176,
+      qstab := 308, qclifford := 1210, width := 308, meas := 154, twoQubit := 829 }),
+  ("ghz_state_n23",
+    { qasm := 46, logicq := 46, mixed := 46, syndrome := 138, logicalQStab := 184,
+      qstab := 322, qclifford := 1265, width := 322, meas := 161, twoQubit := 867 }),
+  ("bv_n14",
+    { qasm := 54, logicq := 54, mixed := 54, syndrome := 84, logicalQStab := 300,
+      qstab := 384, qclifford := 950, width := 195, meas := 97, twoQubit := 518 }),
+  ("bv_n19",
+    { qasm := 74, logicq := 74, mixed := 74, syndrome := 114, logicalQStab := 410,
+      qstab := 524, qclifford := 1295, width := 265, meas := 132, twoQubit := 708 }),
+  ("cat_n35",
+    { qasm := 70, logicq := 70, mixed := 70, syndrome := 210, logicalQStab := 280,
+      qstab := 490, qclifford := 1925, width := 490, meas := 245, twoQubit := 1323 }),
+  ("ghz_n40",
+    { qasm := 80, logicq := 80, mixed := 80, syndrome := 240, logicalQStab := 320,
+      qstab := 560, qclifford := 2200, width := 560, meas := 280, twoQubit := 1513 }),
+  ("bv_n30",
+    { qasm := 107, logicq := 107, mixed := 107, syndrome := 180, logicalQStab := 575,
+      qstab := 755, qclifford := 1977, width := 419, meas := 209, twoQubit := 1049 }),
+  ("cat_n65",
+    { qasm := 130, logicq := 130, mixed := 130, syndrome := 390, logicalQStab := 520,
+      qstab := 910, qclifford := 3575, width := 910, meas := 455, twoQubit := 2463 }),
+  ("ghz_n78",
+    { qasm := 156, logicq := 156, mixed := 156, syndrome := 468, logicalQStab := 624,
+      qstab := 1092, qclifford := 4290, width := 1092, meas := 546, twoQubit := 2957 })
+]
+
+/-! ## qLDPC/code-family physical LOC fixtures. -/
+
+def rawXCheck2Decl : ChainQ.NamedCodeDecl :=
+  { name := "raw_xcheck2",
+    decl := .css ChainQ.xCheck2,
+    logicalIndex := derivedIndexSpec? ["data"] ChainQ.xCheck2 }
+
+def rawXCheck2Req : AllocationRequest :=
+  { decls := [rawXCheck2Decl],
+    dataLogicals := [⟨"raw_xcheck2", "data"⟩],
+    ancillas := [] }
+
+def hgp32Code : ChainQ.CSSCode :=
+  ChainQ.Internal.hgp (ChainQ.repOpen 3) (ChainQ.repOpen 2) 2 3 1 2
+
+def hgp32Decl : ChainQ.NamedCodeDecl :=
+  { name := "hgp32",
+    decl := .hgp (ChainQ.repOpen 3) (ChainQ.repOpen 2) 2 3 1 2,
+    logicalIndex := derivedIndexSpec? (logicalNames "l" hgp32Code.k) hgp32Code }
+
+def hgp32Req : AllocationRequest :=
+  { decls := [hgp32Decl], dataLogicals := [⟨"hgp32", "l0"⟩], ancillas := [] }
+
+def actualLP3Code : ChainQ.CSSCode :=
+  ChainQ.Internal.liftedProduct 3 [[[0], [1]]] 1 2
+
+def actualLP3Decl : ChainQ.NamedCodeDecl :=
+  { name := "actual_lp3",
+    decl := .liftedProduct 3 [[[0], [1]]] 1 2,
+    logicalIndex := derivedIndexSpec? (logicalNames "l" actualLP3Code.k) actualLP3Code }
+
+def actualLP3Req : AllocationRequest :=
+  { decls := [actualLP3Decl],
+    dataLogicals := [⟨"actual_lp3", "l0"⟩, ⟨"actual_lp3", "l1"⟩],
+    ancillas := [] }
+
+def toricReq (d : Nat) : AllocationRequest :=
+  { decls := [toricDecl ("tor" ++ toString d) d ["a", "b"]],
+    dataLogicals := [⟨"tor" ++ toString d, "a"⟩, ⟨"tor" ++ toString d, "b"⟩],
+    ancillas := [] }
+
+def bb33Code : ChainQ.CSSCode :=
+  ChainQ.Internal.bb 3 3 [(0, 0), (1, 0), (0, 2)] [(0, 0), (2, 0), (0, 1)]
+
+def bb33Decl : ChainQ.NamedCodeDecl :=
+  { name := "bb33",
+    decl := .bb 3 3 [(0, 0), (1, 0), (0, 2)] [(0, 0), (2, 0), (0, 1)],
+    logicalIndex := derivedIndexSpec? (logicalNames "l" bb33Code.k) bb33Code }
+
+def bb33Req : AllocationRequest :=
+  { decls := [bb33Decl], dataLogicals := [⟨"bb33", "l0"⟩, ⟨"bb33", "l1"⟩],
+    ancillas := [] }
+
+def hgpOpenName (a b : Nat) : String := "hgp_open_" ++ toString a ++ "_" ++ toString b
+
+def hgpOpenCode (a b : Nat) : ChainQ.CSSCode :=
+  ChainQ.Internal.hgp (ChainQ.repOpen a) (ChainQ.repOpen b) (a - 1) a (b - 1) b
+
+def hgpOpenDecl (a b : Nat) : ChainQ.NamedCodeDecl :=
+  let c := hgpOpenCode a b
+  { name := hgpOpenName a b,
+    decl := .hgp (ChainQ.repOpen a) (ChainQ.repOpen b) (a - 1) a (b - 1) b,
+    logicalIndex := derivedIndexSpec? (logicalNames "l" c.k) c }
+
+def hgpOpenReq (a b : Nat) : AllocationRequest :=
+  { decls := [hgpOpenDecl a b],
+    dataLogicals := [⟨hgpOpenName a b, "l0"⟩],
+    ancillas := [] }
+
+def liftedProductName (ell : Nat) : String := "lp_line_" ++ toString ell
+
+def liftedProductLineCode (ell : Nat) : ChainQ.CSSCode :=
+  ChainQ.Internal.liftedProduct ell [[[0], [1]]] 1 2
+
+def liftedProductLineDecl (ell : Nat) : ChainQ.NamedCodeDecl :=
+  let c := liftedProductLineCode ell
+  { name := liftedProductName ell,
+    decl := .liftedProduct ell [[[0], [1]]] 1 2,
+    logicalIndex := derivedIndexSpec? (logicalNames "l" c.k) c }
+
+def liftedProductLineReq (ell : Nat) : AllocationRequest :=
+  { decls := [liftedProductLineDecl ell],
+    dataLogicals := [⟨liftedProductName ell, "l0"⟩, ⟨liftedProductName ell, "l1"⟩],
+    ancillas := [] }
+
+def bbParamCode (l m : Nat) (a b : List (Nat × Nat)) : ChainQ.CSSCode :=
+  ChainQ.Internal.bb l m a b
+
+def bbParamDecl (name : String) (l m : Nat) (a b : List (Nat × Nat)) :
+    ChainQ.NamedCodeDecl :=
+  let c := bbParamCode l m a b
+  { name := name,
+    decl := .bb l m a b,
+    logicalIndex := derivedIndexSpec? (logicalNames "l" c.k) c }
+
+def bbParamReq (name : String) (l m : Nat) (a b : List (Nat × Nat)) :
+    AllocationRequest :=
+  { decls := [bbParamDecl name l m a b],
+    dataLogicals := [⟨name, "l0"⟩, ⟨name, "l1"⟩],
+    ancillas := [] }
+
+structure BBFamilyCase where
+  name : String
+  l : Nat
+  m : Nat
+  a : List (Nat × Nat)
+  b : List (Nat × Nat)
+
+def bbFamilyCases : List BBFamilyCase := [
+  { name := "bb_demo_8_2", l := 2, m := 2,
+    a := [(0, 0), (1, 0)], b := [(0, 0), (0, 1)] },
+  { name := "bb_dimjump_18_2", l := 3, m := 3,
+    a := [(2, 1), (2, 2)], b := [(0, 0), (1, 2)] },
+  { name := "bb_dimjump_30_2", l := 3, m := 5,
+    a := [(1, 0), (0, 2)], b := [(0, 0), (1, 2)] },
+  { name := "bb_dimjump_54_2", l := 3, m := 9,
+    a := [(1, 3), (2, 1)], b := [(0, 0), (1, 8)] }
+]
+
+def bbFamilyReq (c : BBFamilyCase) : AllocationRequest :=
+  bbParamReq c.name c.l c.m c.a c.b
+
+def separatedToricDecl (d i : Nat) : ChainQ.NamedCodeDecl :=
+  toricDecl (logicalName "t" i) d ["data", "aux"]
+
+def separatedToricRequest (d n : Nat) : AllocationRequest :=
+  { decls := (List.range n).map (separatedToricDecl d),
+    dataLogicals := (List.range n).map
+      (fun i => { code := logicalName "t" i, logical := "data" }),
+    ancillas := [],
+    cnotMode := .strictTransversal,
+    cnotIncidence := some (TypeChecker.idMat (ChainQ.toric d).n) }
+
+structure LOCFixture where
+  name : String
+  prog : QASMProgram
+  req  : AllocationRequest
+  expected : LayerLOC
+
+def locFixtureMatches (f : LOCFixture) : Bool :=
+  syndromeEnvelopeMatches f.prog f.req && programLOCMatches f.prog f.req f.expected
+
+def codeFamilyLOCFixtures : List LOCFixture := [
+  { name := "raw_css_xcheck2_readout", prog := progPauliReadout, req := rawXCheck2Req,
+    expected :=
+      { qasm := 2, logicq := 2, mixed := 2, syndrome := 1, logicalQStab := 2,
+        qstab := 3, qclifford := 10, width := 4, meas := 2, twoQubit := 4 } },
+  { name := "surface_d2_readout", prog := progPauliReadout, req := reqSurface2,
+    expected :=
+      { qasm := 2, logicq := 2, mixed := 2, syndrome := 4, logicalQStab := 3,
+        qstab := 7, qclifford := 28, width := 10, meas := 5, twoQubit := 14 } },
+  { name := "toric_d2_two_readout", prog := progTwoReadout, req := reqToric2,
+    expected :=
+      { qasm := 4, logicq := 4, mixed := 4, syndrome := 8, logicalQStab := 6,
+        qstab := 14, qclifford := 64, width := 18, meas := 10, twoQubit := 36 } },
+  { name := "hgp_8_1_readout", prog := progPauliReadout, req := hgp32Req,
+    expected :=
+      { qasm := 2, logicq := 2, mixed := 2, syndrome := 7, logicalQStab := 3,
+        qstab := 10, qclifford := 47, width := 16, meas := 8, twoQubit := 25 } },
+  { name := "lifted_product_15_3_two_readout", prog := progTwoReadout, req := actualLP3Req,
+    expected :=
+      { qasm := 4, logicq := 4, mixed := 4, syndrome := 12, logicalQStab := 6,
+        qstab := 18, qclifford := 78, width := 29, meas := 14, twoQubit := 40 } },
+  { name := "bb_18_4_two_readout", prog := progTwoReadout, req := bb33Req,
+    expected :=
+      { qasm := 4, logicq := 4, mixed := 4, syndrome := 18, logicalQStab := 14,
+        qstab := 32, qclifford := 181, width := 38, meas := 20, twoQubit := 120 } }
+]
+
+def mixedLayerLOC? (Γ : TypeChecker.TypedEnv) (layout : Compiler.Verification.PhysLayout)
+    (prog : Compiler.LogicalExec) :
+    Except PhysicalCompileError LayerLOC := do
+  let logical <- liftVerificationPhysical
+    (Compiler.Verification.compileAndVerifyMixedProgQStab Γ [] layout prog)
+  let syndrome <- syndromeRoundFromEnv? Γ layout
+  let qstab := syndrome ++ shiftStabilizerProgQVars syndrome.dataflow.length logical
+  let cfg <- defaultExtractionConfig? qstab
+  let qclifford <- liftQCliffordPhysical (compileStabilizerToQClifford? cfg qstab)
+  return {
+    qasm := 0,
+    logicq := 0,
+    mixed := prog.length,
+    syndrome := syndrome.length,
+    logicalQStab := logical.length,
+    qstab := qstab.length,
+    qclifford := QClifford.Circuit.gateCount qclifford,
+    width := QClifford.Circuit.width qclifford,
+    meas := QClifford.Circuit.measCount qclifford,
+    twoQubit := QClifford.Circuit.twoQubitCount qclifford }
+
+def mixedLOCMatches (Γ : TypeChecker.TypedEnv) (layout : Compiler.Verification.PhysLayout)
+    (prog : Compiler.LogicalExec) (expected : LayerLOC) : Bool :=
+  match mixedLayerLOC? Γ layout prog with
+  | .ok got => decide (got = expected)
+  | .error _ => false
+
+def mixedBare2Complex : Compiler.LogicalExec :=
+  [ Compiler.MixedInstr.transversal 0 Compiler.hGate2x2,
+    Compiler.MixedInstr.transversal 0 Compiler.sGate2x2,
+    Compiler.MixedInstr.pauli ⟨0, 0⟩ .X,
+    Compiler.MixedInstr.transversalCNOT Compiler.Verification.cnotSpec2,
+    Compiler.MixedInstr.ppm (.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)]),
+    Compiler.MixedInstr.ppm (.meas 1 [(⟨1, 0⟩, PPM.PLetter.X)]) ]
+
+def mixedBareBatchLocal : Compiler.LogicalExec :=
+  [ Compiler.MixedInstr.transversalCNOTBatch Compiler.Verification.batchSpec2,
+    Compiler.MixedInstr.pauli ⟨0, 0⟩ .Z,
+    Compiler.MixedInstr.pauli ⟨1, 0⟩ .X,
+    Compiler.MixedInstr.ppm (.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)]),
+    Compiler.MixedInstr.ppm (.meas 1 [(⟨1, 0⟩, PPM.PLetter.Z)]) ]
+
+def mixedCrossBlockPPMBlocked : Compiler.LogicalExec :=
+  [ Compiler.MixedInstr.ppm
+      (.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z), (⟨1, 0⟩, PPM.PLetter.Z)]) ]
+
 /-! ## Compile-time benchmark gates
 
 These use `#guard` rather than `#eval`, so a benchmark regression is a build failure and
@@ -1325,8 +1757,56 @@ successful builds stay quiet.
 #guard (positiveSuite.filter (fun b => ! tMagicBench b)).all compilesPhysicallyWithSeparatedBare
 #guard (positiveSuite.filter tMagicBench).all
   (fun b => ! compilesPhysicallyWithSeparatedBare b)
+#guard physicalLOCExpectations.length == 18
+#guard physicalLOCExpectations.all benchLOCMatches
+#guard qasmBenchShowcaseLOC.length == 6
+#guard qasmBenchShowcaseLOC.all benchLOCMatches
+#guard ok? ((steaneDecl "steane").checkLogicalIndex?)
+#guard (positiveSuite.filter (fun b => ! tMagicBench b)).all compilesPhysicallyWithSteane
+#guard (positiveSuite.filter tMagicBench).all (fun b => ! compilesPhysicallyWithSteane b)
+#guard steaneEncodedLOCExpectations.length == 18
+#guard steaneEncodedLOCExpectations.all steaneBenchLOCMatches
+#guard ok? rawXCheck2Decl.checkLogicalIndex?
+#guard ok? hgp32Decl.checkLogicalIndex?
+#guard ok? actualLP3Decl.checkLogicalIndex?
+#guard ok? bb33Decl.checkLogicalIndex?
+#guard codeFamilyLOCFixtures.length == 6
+#guard codeFamilyLOCFixtures.all locFixtureMatches
+#guard mixedLOCMatches Compiler.Verification.tenv2Q Compiler.Verification.twoLayout mixedBare2Complex
+  { qasm := 0, logicq := 0, mixed := 6, syndrome := 0, logicalQStab := 6,
+    qstab := 6, qclifford := 7, width := 2, meas := 2, twoQubit := 1 }
+#guard mixedLOCMatches Compiler.Verification.tenv2Q Compiler.Verification.twoLayout mixedBareBatchLocal
+  { qasm := 0, logicq := 0, mixed := 5, syndrome := 0, logicalQStab := 5,
+    qstab := 5, qclifford := 5, width := 2, meas := 2, twoQubit := 1 }
+#guard !(ok? (mixedLayerLOC? Compiler.Verification.tenv2Q Compiler.Verification.twoLayout
+  mixedCrossBlockPPMBlocked))
+#guard syndromeEnvelopeMatches progPauliReadout hgp32Req
+#guard programLOCMatches progPauliReadout hgp32Req
+  { qasm := 2, logicq := 2, mixed := 2, syndrome := 7, logicalQStab := 3,
+    qstab := 10, qclifford := 47,
+    width := 16, meas := 8, twoQubit := 25 }
+#guard syndromeEnvelopeMatches progTwoReadout reqToric2
+#guard programLOCMatches progTwoReadout reqToric2
+  { qasm := 4, logicq := 4, mixed := 4, syndrome := 8, logicalQStab := 6,
+    qstab := 14, qclifford := 64,
+    width := 18, meas := 10, twoQubit := 36 }
+#guard syndromeEnvelopeMatches progTwoReadout (toricReq 3)
+#guard programLOCMatches progTwoReadout (toricReq 3)
+  { qasm := 4, logicq := 4, mixed := 4, syndrome := 18, logicalQStab := 8,
+    qstab := 26, qclifford := 133,
+    width := 38, meas := 20, twoQubit := 78 }
+#guard syndromeEnvelopeMatches progTwoReadout reqToyLP3
+#guard programLOCMatches progTwoReadout reqToyLP3
+  { qasm := 4, logicq := 4, mixed := 4, syndrome := 6, logicalQStab := 6,
+    qstab := 12, qclifford := 52,
+    width := 14, meas := 8, twoQubit := 29 }
+#guard syndromeEnvelopeMatches progTwoReadout bb33Req
+#guard programLOCMatches progTwoReadout bb33Req
+  { qasm := 4, logicq := 4, mixed := 4, syndrome := 18, logicalQStab := 14,
+    qstab := 32, qclifford := 181,
+    width := 38, meas := 20, twoQubit := 120 }
 
-/-- Surface-code smoke: CX-only programs work with one surface block per logical. -/
+/-- Surface-code distance LOC tests: CX-only programs work with one surface block per logical. -/
 def separatedSurfaceDecl (d i : Nat) : ChainQ.NamedCodeDecl :=
   surfaceDecl (logicalName "s" i) d ["data"]
 
@@ -1341,9 +1821,110 @@ def separatedSurfaceRequest (d n : Nat) : AllocationRequest :=
     cnotIncidence := some (idMat (ChainQ.surface d).n) }
 
 def cxOnlyQASM : String := "qreg q[2]; cx q[0],q[1];"
+def cxChain4QASM : String :=
+  "qreg q[4]; cx q[0],q[1]; cx q[1],q[2]; cx q[2],q[3];"
+
+def qecDistanceSweep : List Nat := [2, 3, 4, 5]
+def invalidDistanceSweep : List Nat := [0, 1]
+def hgpOpenSweep : List (Nat × Nat) := [(2, 2), (3, 2), (3, 3), (4, 3)]
+def liftedProductLineSweep : List Nat := [2, 3, 4, 5]
+
+def readoutWorks (req : AllocationRequest) : Bool :=
+  ok? (compileQASMToQClifford? [] progPauliReadout req)
+
+def twoReadoutWorks (req : AllocationRequest) : Bool :=
+  ok? (compileQASMToQClifford? [] progTwoReadout req)
+
+def surfaceDistanceWorks (d : Nat) : Bool :=
+  readoutWorks (separatedSurfaceRequest d 1) &&
+  ok? (compileOpenQASM2ToQClifford? [] cxOnlyQASM (separatedSurfaceRequest d 2)) &&
+  ok? (compileOpenQASM2ToQClifford? [] cxChain4QASM (separatedSurfaceRequest d 4))
+
+def toricDistanceWorks (d : Nat) : Bool :=
+  twoReadoutWorks (toricReq d)
+
+def toricIdentityCXBlocked (d : Nat) : Bool :=
+  !(ok? (compileOpenQASM2ToQClifford? [] cxOnlyQASM (separatedToricRequest d 2)))
+
+def surfaceInvalidDistanceRejected (d : Nat) : Bool :=
+  !(ok? (compileQASMToQClifford? [] progPauliReadout (separatedSurfaceRequest d 1)))
+
+def toricInvalidDistanceRejected (d : Nat) : Bool :=
+  !(ok? (compileQASMToQClifford? [] progTwoReadout (toricReq d)))
+
+def hgpOpenCaseWorks (ab : Nat × Nat) : Bool :=
+  ok? ((hgpOpenDecl ab.1 ab.2).checkLogicalIndex?) &&
+  readoutWorks (hgpOpenReq ab.1 ab.2)
+
+def liftedProductLineWorks (ell : Nat) : Bool :=
+  ok? ((liftedProductLineDecl ell).checkLogicalIndex?) &&
+  twoReadoutWorks (liftedProductLineReq ell)
+
+def bbFamilyCaseWorks (c : BBFamilyCase) : Bool :=
+  ok? ((bbParamDecl c.name c.l c.m c.a c.b).checkLogicalIndex?) &&
+  twoReadoutWorks (bbFamilyReq c)
+
+#guard qecDistanceSweep.length == 4
+#guard qecDistanceSweep.all surfaceDistanceWorks
+#guard qecDistanceSweep.all toricDistanceWorks
+#guard qecDistanceSweep.all toricIdentityCXBlocked
+#guard invalidDistanceSweep.all surfaceInvalidDistanceRejected
+#guard invalidDistanceSweep.all toricInvalidDistanceRejected
+#guard hgpOpenSweep.length == 4
+#guard hgpOpenSweep.all hgpOpenCaseWorks
+#guard liftedProductLineSweep.length == 4
+#guard liftedProductLineSweep.all liftedProductLineWorks
+#guard bbFamilyCases.length == 4
+#guard bbFamilyCases.all bbFamilyCaseWorks
+
+#guard !(ok? (compileOpenQASM2ToQClifford? [] cxOnlyQASM (separatedToricRequest 2 2)))
+#guard !(ok? (compileOpenQASM2ToQClifford? [] cxOnlyQASM (separatedToricRequest 3 2)))
 
 #guard ok? (compileOpenQASM2ToMixIR? [] cxOnlyQASM (separatedSurfaceRequest 2 2))
 #guard ok? (compileOpenQASM2ToMixIR? [] cxOnlyQASM (separatedSurfaceRequest 3 2))
+#guard ok? (compileOpenQASM2ToMixIR? [] cxOnlyQASM (separatedSurfaceRequest 4 2))
+#guard ok? (compileOpenQASM2ToMixIR? [] cxChain4QASM (separatedSurfaceRequest 2 4))
+#guard ok? (compileOpenQASM2ToMixIR? [] cxChain4QASM (separatedSurfaceRequest 3 4))
+#guard ok? (compileOpenQASM2ToMixIR? [] cxChain4QASM (separatedSurfaceRequest 4 4))
+#guard syndromeEnvelopeMatches progPauliReadout (separatedSurfaceRequest 2 1)
+#guard syndromeEnvelopeMatches progPauliReadout (separatedSurfaceRequest 3 1)
+#guard syndromeEnvelopeMatches progPauliReadout (separatedSurfaceRequest 4 1)
+#guard sourceLOCMatches cxOnlyQASM (separatedSurfaceRequest 2 2)
+  { qasm := 1, logicq := 1, mixed := 1, syndrome := 8, logicalQStab := 5,
+    qstab := 13, qclifford := 49,
+    width := 18, meas := 8, twoQubit := 29 }
+#guard sourceLOCMatches cxOnlyQASM (separatedSurfaceRequest 3 2)
+  { qasm := 1, logicq := 1, mixed := 1, syndrome := 24, logicalQStab := 13,
+    qstab := 37, qclifford := 153,
+    width := 50, meas := 24, twoQubit := 93 }
+#guard sourceLOCMatches cxOnlyQASM (separatedSurfaceRequest 4 2)
+  { qasm := 1, logicq := 1, mixed := 1, syndrome := 48, logicalQStab := 25,
+    qstab := 73, qclifford := 313,
+    width := 98, meas := 48, twoQubit := 193 }
+#guard sourceLOCMatches cxChain4QASM (separatedSurfaceRequest 2 4)
+  { qasm := 3, logicq := 3, mixed := 3, syndrome := 16, logicalQStab := 15,
+    qstab := 31, qclifford := 103,
+    width := 36, meas := 16, twoQubit := 63 }
+#guard sourceLOCMatches cxChain4QASM (separatedSurfaceRequest 3 4)
+  { qasm := 3, logicq := 3, mixed := 3, syndrome := 48, logicalQStab := 39,
+    qstab := 87, qclifford := 319,
+    width := 100, meas := 48, twoQubit := 199 }
+#guard sourceLOCMatches cxChain4QASM (separatedSurfaceRequest 4 4)
+  { qasm := 3, logicq := 3, mixed := 3, syndrome := 96, logicalQStab := 75,
+    qstab := 171, qclifford := 651,
+    width := 196, meas := 96, twoQubit := 411 }
+#guard programLOCMatches progPauliReadout (separatedSurfaceRequest 2 1)
+  { qasm := 2, logicq := 2, mixed := 2, syndrome := 4, logicalQStab := 3,
+    qstab := 7, qclifford := 28,
+    width := 10, meas := 5, twoQubit := 14 }
+#guard programLOCMatches progPauliReadout (separatedSurfaceRequest 3 1)
+  { qasm := 2, logicq := 2, mixed := 2, syndrome := 12, logicalQStab := 4,
+    qstab := 16, qclifford := 78,
+    width := 26, meas := 13, twoQubit := 43 }
+#guard programLOCMatches progPauliReadout (separatedSurfaceRequest 4 1)
+  { qasm := 2, logicq := 2, mixed := 2, syndrome := 24, logicalQStab := 5,
+    qstab := 29, qclifford := 154,
+    width := 50, meas := 25, twoQubit := 88 }
 
 /-- H on surface-code blocks is not yet an automatic positive benchmark. -/
 def surfaceHBlockedQASM : String := "qreg q[1]; h q[0];"
