@@ -46,9 +46,42 @@ noncomputable def RotProg.denote (n : Nat) (lay : LQubit → Fin n) (p : RotProg
 
 ## Example
 
-There is no checker code in this folder to quote. The closest concrete artifact
-is the rotation-layer **composition law** in [`PPR/Semantics.lean`](../../PPR/Semantics.lean),
-the proved law a future PPR pass would build on:
+There is no checker code in this folder to quote. The concrete artifacts are
+the PPR **programs** the IR represents — sequences of logical Pauli-product
+rotations. Each logical gate is one rotation `exp(i φ P)`; these are the actual
+worked values from [`PPR/Syntax.lean`](../../PPR/Syntax.lean#L104):
+
+```lean
+-- A logical T on q: the +π/8 Z-rotation exp(i π/8 Z)  (T-type, π/8)
+def rotT (q : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q, .Z)]⟩
+-- A logical S on q: the +π/4 Z-rotation             (Clifford, π/4)
+def rotS (q : LQubit) : Rot := ⟨⟨false, .piQuarter⟩, [(q, .Z)]⟩
+-- A two-qubit π/8 rotation about Z⊗Z over {q₁,q₂}     (T-type, π/8)
+def rotZZ (q₁ q₂ : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q₁, .Z), (q₂, .Z)]⟩
+```
+
+A `RotProg` is just a list of these rotations applied left to right. The
+T-count is the number of `π/8` rotations, and the program is well-formed when
+every axis lists at most one factor per logical qubit
+([`PPR/Syntax.lean`](../../PPR/Syntax.lean#L116)):
+
+```lean
+-- A 3-rotation PPR program over logical qubits ⟨0,0⟩ and ⟨0,1⟩:
+[ rotT ⟨0, 0⟩                  -- +π/8 · (⟨0,0⟩↦Z)
+, rotS ⟨0, 0⟩                  -- +π/4 · (⟨0,0⟩↦Z)
+, rotZZ ⟨0, 0⟩ ⟨0, 1⟩ ]        -- +π/8 · (⟨0,0⟩↦Z, ⟨0,1⟩↦Z)
+-- tCount = 2   (the two π/8 rotations: rotT and rotZZ; rotS is Clifford)
+-- wf     = true (every axis is duplicate-qubit-free)
+
+(rotZZ ⟨0, 0⟩ ⟨0, 1⟩).support = [⟨0, 0⟩, ⟨0, 1⟩]   -- OK: the rotation acts on {⟨0,0⟩, ⟨0,1⟩}
+
+-- A malformed axis (two factors on the same logical qubit):
+[(⟨0, 0⟩, .Z), (⟨0, 0⟩, .X)]   -- rejected: PauliString.wf = false (duplicate logical qubit)
+```
+
+The closest concrete *proved* artifact is the rotation-layer **composition law**
+in [`PPR/Semantics.lean`](../../PPR/Semantics.lean), the law a future PPR pass
+would build on:
 
 ```lean
 /-- **Composition law.**  The unitary of a concatenated program is the product

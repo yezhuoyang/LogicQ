@@ -57,25 +57,71 @@ the lifted target Pauli is in the span of the merged group.
 
 ## Example
 
+The environment, the measurement targets, and the adapter capability are all DATA. The bare qubit `q0`, the
+`[[3,1,1]]` repetition code `rep`, and the joint `Z̄ ⊗ Z̄` target `zzTarget`
+([Examples.lean:17](Examples.lean#L17)):
+
 ```lean
--- single-block logical measurement is native:
-example : ok? (checkPPM tenvQ [] [(⟨0, 0⟩, PPM.PLetter.Z)]) = true := by decide
--- DRIVING EXAMPLE: cross-code joint PPM with NO capability is rejected …
-example : ok? (checkPPM tenvQR [] zzTarget) = false := by decide
--- … and ADMITTED only with a valid adapter capability …
-example : ok? (checkPPM tenvQR [zzCap] zzTarget) = true := by decide
--- … but a degenerate capability (no connection) fails the merged-code certificate.
-example : ok? (checkPPM tenvQR [{ zzCap with connStab := [] }] zzTarget) = false := by decide
+-- the two data codes that populate the environment:
+def q0 : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+def rep : Block :=                                                 -- the [[3,1,1]] repetition code
+  { n := 3,
+    stab := [[false, false, false, true,  true,  false],
+             [false, false, false, false, true,  true ]],
+    lx := [[true,  true,  true,  false, false, false]],            -- X̄ = XXX
+    lz := [[false, false, false, true,  false, false]] }           -- Z̄ = ZII
+
+-- the joint Z̄(block 0) ⊗ Z̄(block 1) lattice-surgery target:
+def zzTarget : PPM.MTarget := [(⟨0, 0⟩, PPM.PLetter.Z), (⟨1, 0⟩, PPM.PLetter.Z)]
+
+-- the adapter capability whose connection stabilizer is the joint Z ⊗ Z₀ operator:
+def zzCap : Capability :=
+  { kind := .adapterPPM, blocks := [0, 1], ancN := 0,
+    connStab := [[false, false, false, false, true, true, false, false]] }
+```
+
+Applying `checkPPM` to these values, over the environments `tenvQ = ⟨[q0]⟩` and `tenvQR = ⟨[q0, rep]⟩`:
+
+```lean
+-- env tenvQ = ⟨[q0]⟩, no capabilities:
+[(⟨0, 0⟩, PPM.PLetter.Z)]                                  -- OK: single-block Z̄ is native (weight-1)
+
+-- env tenvR = ⟨[rep]⟩, no capabilities:
+[(⟨0, 0⟩, PPM.PLetter.X)]                                  -- OK: single-block X̄ = XXX is a logical op of rep
+
+-- env tenvQR = ⟨[q0, rep]⟩, the DRIVING joint Z̄ ⊗ Z̄ target zzTarget:
+[(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z)]   with caps []               -- rejected: cross-code joint PPM, no capability
+[(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z)]   with caps [zzCap]          -- OK: a valid adapter capability supplies the merge
+[(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z)]   with caps [{zzCap with connStab := []}]
+                                                           -- rejected: degenerate cap (no connection) fails the
+                                                           --           merged-code certificate
 ```
 
 A joint `Z̄ ⊗ Z̄` measurement across a bare qubit and the `[[3,1,1]]` repetition code is rejected with no
 capability, admitted only when an adapter capability supplies a valid merge, and rejected again when that
 capability has no connection stabilizer. Source: [Examples.lean](Examples.lean).
 
+The matcher also enforces target shape and row safety; the rejected targets carry a structured `TypeError`:
+
+```lean
+-- env tenvQ = ⟨[q0]⟩, no capabilities:
+[]                                                         -- rejected: emptyMeasurement (no identity/no-op form)
+[(⟨0, 0⟩, .X), (⟨0, 0⟩, .Z)]                              -- rejected: nonNativeMeasurement (repeats logical qubit ⟨0,0⟩)
+[(⟨0, 5⟩, .Z)]                                            -- rejected: badLogicalIndex 0 5 (out of range, not identity)
+
+-- env tenvQR = ⟨[q0, rep]⟩, no capabilities:
+[(⟨0, 0⟩, .Z), (⟨1, 0⟩, .Z), (⟨1, 0⟩, .X)]               -- rejected: nonNativeMeasurement (>2 factors)
+```
+
+A malformed block — a zero-width logical, `badBlk = { n := 1, stab := [], lx := [[]], lz := [[]] }` — is
+`Block.valid badBlk = false`, so it is UNREPRESENTABLE in a `TypedEnv`; the raw `checkPPMFromEnv` wrapper
+rejects it at the boundary with `malformedBlock 0`, while a good raw env (`{ blocks := [q0] }`) is accepted.
+Source: [Examples.lean](Examples.lean).
+
 ## Status & scope
 
-These are `by decide` executable tests (tier **D**) confirming that `checkPPM` accepts / rejects the right
-targets; the entire example set in [Examples.lean](Examples.lean) is `by decide`-closed. The certificate checks
+The values above are confirmed by `by decide` executable tests (tier **D**) showing that `checkPPM` accepts /
+rejects the right targets; the entire example set in [Examples.lean](Examples.lean) is `by decide`-closed. The certificate checks
 in [Check.lean](Check.lean) — merged-code commutation, data-code preservation, and target-in-span — are
 genuine, concretely-decidable predicates over the lifted symplectic space.
 

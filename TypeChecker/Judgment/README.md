@@ -53,19 +53,37 @@ def checkPPMProgram (Γ : TypedEnv) (caps : List Capability) (s : Stmt) :
 
 ## Example
 
+The judgment's input data, in the binary-symplectic syntax it consumes
+([Transversal/Examples.lean](Transversal/Examples.lean)):
+
 ```lean
--- transversal H on one qubit builds `J 1` and induces X̄ ↦ Z̄:
-example : Internal.transversalMap 1 hGate = J 1 := by decide
-example : ok? (checkTransversal toneQ 0 hGate) = true := by decide
-example : (res? (checkTransversal toneQ 0 hGate)).map (·.inducedLX) = some [[false, true]] := by decide
--- transversal H is NOT legal on the non-self-dual repetition code:
-example : ok? (checkTransversal trep3 0 hGate) = false := by decide
+-- the single-qubit Hadamard as a 2×2 symplectic (X↔Z):
+hGate : BoolMat := [[false, true], [true, false]]
+
+-- a single logical qubit, no stabilizers (X̄ = X, Z̄ = Z):
+oneQ : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+
+-- the complete [[3,1,1]] repetition code (Z₀Z₁, Z₁Z₂; X̄ = XXX, Z̄ = Z₀):
+rep3 : Block :=
+  { n := 3,
+    stab := [[false, false, false, true,  true,  false],
+             [false, false, false, false, true,  true ]],
+    lx := [[true,  true,  true,  false, false, false]],
+    lz := [[false, false, false, true,  false, false]] }
 ```
 
 `checkTransversal Γ b g` succeeds only if the tensor-power of the single-qubit gate `g`
-is symplectic and preserves the block's stabilizers; these `by decide` examples show it
-accepting transversal H on a self-dual block (and recovering the induced logical action
-X̄ ↦ Z̄) while rejecting it on the repetition code.
+is symplectic and preserves the block's stabilizers. Feeding the values above:
+
+```lean
+-- transversal H on oneQ: the tensor power is the symplectic J 1 ( = [[F,T],[T,F]] ),
+-- which preserves the (empty) stabilizer and induces X̄ ↦ Z̄:
+hGate on oneQ   -- OK: induced logical action inducedLX = [[false, true]]  (X̄ ↦ Z̄)
+
+-- transversal H on the non-self-dual repetition code:
+hGate on rep3   -- rejected: J 3 does not preserve the rep-code stabilizers (Z₀Z₁, Z₁Z₂)
+```
+
 Source: [Transversal/Examples.lean](Transversal/Examples.lean).
 
 ## Status & scope

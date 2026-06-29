@@ -60,17 +60,45 @@ theorem step_pauli_matches_exec (L : Layout) (n : Nat) (caps : List Capability)
 
 ## Example
 
+The §6 source-vs-emitted check is about ONE program, `H ; S ; H` on a single logical
+qubit. This is its actual value at each layer ([ExecMixed.lean:159](ExecMixed.lean#L159),
+[Examples.lean:40](Examples.lean#L40)):
+
 ```lean
--- SOURCE vs EMITTED (Task 6): compile `H;S;H` to a proof-carrying mixed program,
--- DECODE the EMITTED transversals, and check the decoded circuit's distribution
--- equals the source circuit's — running the emitted instructions, not source ops.
-example : (match compile? .executable { caps := [], anc := ⟨1, 0⟩ } tenvQ hshProg with
-           | .ok c => decide (runGates 1 (loweredGates (Layout.flat 4) c.prog) (init 1)
-                              = runGates 1 (sourceGates (Layout.flat 4) hshProg) (init 1))
-           | .error _ => false) = true := by decide
+-- SOURCE program — a list of named logical ops (LogicalOp):
+[.hGate ⟨0, 0⟩, .sGate ⟨0, 0⟩, .hGate ⟨0, 0⟩]      -- hshProg
+
+-- SOURCE circuit under the flat layout (L ⟨0,0⟩ = sim qubit 0):
+[Gate.H 0, Gate.S 0, Gate.H 0]                       -- sourceGates (Layout.flat 4) hshProg
+
+-- EMITTED Mixed program (the proof-carrying transversals compile? produces) decodes to
+-- the SAME three gates — two direct transversals + one, NOT a PPM gadget (length 3):
+[Gate.H 0, Gate.S 0, Gate.H 0]                       -- loweredGates (Layout.flat 4) c.prog
+
+-- the common (unnormalised GInt) state both circuits leave on |0⟩ — H S H |0⟩:
+([⟨1, 1⟩, ⟨1, -1⟩] : State)                          -- runGates 1 … (init 1)
 ```
 
-This compiles `H;S;H` through the real `compile?` to a proof-carrying Mixed program, decodes the EMITTED transversal instructions back to gates, and checks by `decide` that the emitted circuit's distribution equals the ideal source circuit's. Source: [Examples.lean](Examples.lean) (§6 tests). Companion checks run Deutsch–Jozsa, two-qubit Grover, and Simon (`n=2`) and confirm their outcome distributions via `regProb … = 0` / `≠ 0` (also `by decide`).
+These two circuits — the ideal source ops and the DECODED emitted instructions — leave the
+exact same state on `|0⟩`, so the direct transversal fragment runs identically before and
+after lowering. Source: [Examples.lean](Examples.lean) (§6 tests).
+
+The §5 algorithms are also real `Gate` lists ([Algorithms.lean:22](Algorithms.lean#L22)), each
+validated by its OUTCOME distribution (`regProb … = 0` for impossible patterns, `≠ 0` for the
+ones that occur):
+
+```lean
+-- Deutsch–Jozsa, 1-bit query + phase ancilla.  Constant f: query measures 0 with certainty.
+def djConstant : List Gate := [.X 1, .H 0, .H 1, .H 0]
+-- Balanced f(x)=x (oracle = CNOT query→ancilla): query measures 1 with certainty.
+def djBalanced : List Gate := [.X 1, .H 0, .H 1, .CNOT 0 1, .H 0]
+-- 2-qubit Grover, marked |11⟩: oracle CZ, then diffusion — both qubits measure 1.
+def grover2 : List Gate :=
+  [.H 0, .H 1, .CZ 0 1, .H 0, .H 1, .X 0, .X 1, .CZ 0 1, .X 0, .X 1, .H 0, .H 1]
+-- Simon, n=2, secret s=11: input uniform over {00,11}; 01 and 10 never occur.
+def simon2 : List Gate :=
+  [.H 0, .H 1, .CNOT 0 2, .CNOT 1 2, .CNOT 0 3, .CNOT 1 3, .H 0, .H 1]
+```
 
 ## Status & scope
 

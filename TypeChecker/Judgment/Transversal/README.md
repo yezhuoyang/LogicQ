@@ -47,19 +47,46 @@ def checkTransversalCNOT (Gamma : TypedEnv) (spec : TransversalCNOTSpec) :
 
 ## Example
 
+The actual inputs are the single-qubit gate `hGate` and three code blocks wrapped into `TypedEnv`s ([Examples.lean](Examples.lean)):
+
 ```lean
--- transversal H on one qubit builds `J 1` and induces X̄ ↦ Z̄:
-example : Internal.transversalMap 1 hGate = J 1 := by decide
-example : ok? (checkTransversal toneQ 0 hGate) = true := by decide
-example : (res? (checkTransversal toneQ 0 hGate)).map (·.inducedLX) = some [[false, true]] := by decide
--- transversal H on two qubits builds `J 2`, legal on the self-dual Bell code:
-example : Internal.transversalMap 2 hGate = J 2 := by decide
-example : ok? (checkTransversal tbell2 0 hGate) = true := by decide
--- REJECTIONS: transversal H is NOT legal on the non-self-dual repetition code;
-example : ok? (checkTransversal trep3 0 hGate) = false := by decide
+-- the local single-qubit gate: Hadamard as a 2×2 symplectic (X↔Z)
+def hGate : BoolMat := [[false, true], [true, false]]
+
+-- a single logical qubit, no stabilizers (X̄ = X, Z̄ = Z)
+def oneQ : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+
+-- the self-dual [[2,0,2]] Bell code (stabilizers XX, ZZ; k = 0)
+def bell2 : Block :=
+  { n := 2, stab := [[true, true, false, false], [false, false, true, true]] }
+
+-- the complete [[3,1,1]] repetition code (Z₀Z₁, Z₁Z₂; X̄ = XXX, Z̄ = Z₀)
+def rep3 : Block :=
+  { n := 3,
+    stab := [[false, false, false, true,  true,  false],
+             [false, false, false, false, true,  true ]],
+    lx := [[true,  true,  true,  false, false, false]],
+    lz := [[false, false, false, true,  false, false]] }
+
+def toneQ  : TypedEnv := ⟨[⟨oneQ,  …⟩]⟩
+def tbell2 : TypedEnv := ⟨[⟨bell2, …⟩]⟩
+def trep3  : TypedEnv := ⟨[⟨rep3,  …⟩]⟩
 ```
 
-Transversal Hadamard succeeds on a bare qubit and the self-dual `[[2,0,2]]` Bell code but is rejected on the non-self-dual `[[3,1,1]]` repetition code, all discharged `by decide`. Source: [Examples.lean](Examples.lean).
+Feeding `hGate` to the transversal checker on each block — its tensor power on `n` qubits is exactly the symplectic form `J n` (the `2n×2n` off-diagonal identity), and the induced logical action sends X̄ ↦ Z̄:
+
+```lean
+-- transversal H on one qubit: tensor power is J 1 = [[F,T],[T,F]]
+-- OK: legal on the bare qubit; induced X̄ = [[false, true]]  (i.e. X̄ ↦ Z̄)
+
+-- transversal H on two qubits: tensor power is J 2 (4×4 off-diagonal identity)
+-- OK: legal on the self-dual [[2,0,2]] Bell code
+
+-- transversal H on three qubits:
+-- rejected: NOT legal on the non-self-dual [[3,1,1]] repetition code
+```
+
+Transversal Hadamard succeeds on a bare qubit and the self-dual `[[2,0,2]]` Bell code but is rejected on the non-self-dual `[[3,1,1]]` repetition code. Source: [Examples.lean](Examples.lean).
 
 ## Status & scope
 

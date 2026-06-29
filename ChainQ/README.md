@@ -65,14 +65,42 @@ theorem chainComplex_css (cc : ChainComplex) :
 
 ## Example
 
+These are source-level code-family declarations in ChainQ syntax (`inductive CodeDecl`). Each
+one elaborates and type-checks through `check?` into a `CheckedCSSCode`:
+
 ```lean
-example : isOk ((CodeDecl.surface 3).check?) = true := by decide
-example : isOk ((CodeDecl.toric 2).check?) = true := by decide
-example : isOk ((CodeDecl.bb 3 3 [(0, 0), (1, 0), (0, 2)] [(0, 0), (2, 0), (0, 1)]).check?) = true := by decide
-example : isOk ((CodeDecl.liftedProduct 3 [[[0], [1]]] 1 2).check?) = true := by decide
+CodeDecl.surface 3                                                              -- OK: the d=3 surface code
+CodeDecl.toric 2                                                               -- OK: the d=2 toric code
+CodeDecl.bb 3 3 [(0, 0), (1, 0), (0, 2)] [(0, 0), (2, 0), (0, 1)]             -- OK: a bivariate-bicycle code
+CodeDecl.liftedProduct 3 [[[0], [1]]] 1 2                                      -- OK: ℓ=3, A=[1,x] → an n=15 lifted-product qLDPC code
 ```
 
-These `by decide` smoke tests in [Syntax.lean](Syntax.lean) show source-level code-family declarations elaborating and type-checking through `check?` into a `CheckedCSSCode`. Companion negative tests in the same file (e.g. `badNClaimSurface3`, `badDClaimSurface3`, `missingDistanceClaimSurface3`) confirm that a wrong declared `[[n,k,d]]` or a missing exact-distance profile is *rejected*.
+A `NamedCodeDecl` additionally carries a claimed `[[n,k,d]]` and a distance profile; the matcher
+in [Syntax.lean](Syntax.lean) accepts the claim only when `n`/`k` recompute and a theorem-backed
+exact-distance profile is supplied. The surface-3 declaration with the correct claim is accepted;
+companion declarations with a wrong `n`, a wrong `d`, or no distance profile are *rejected*:
+
+```lean
+-- OK: n/k recompute and a surface-3 exact-distance profile is supplied
+{ name := "surface3", decl := .surface 3,
+  claimedParams   := some { n := 13, k := 1, d := 3 },
+  distanceProfile := surfaceDistanceBounds? 3 }
+
+-- rejected: declared n=12, but the compiled surface-3 code has n=13      (badNClaimSurface3)
+{ name := "surface3", decl := .surface 3,
+  claimedParams   := some { n := 12, k := 1, d := 3 },
+  distanceProfile := surfaceDistanceBounds? 3 }
+
+-- rejected: declared d=4, but the profile only proves exact d=3          (badDClaimSurface3)
+{ name := "surface3", decl := .surface 3,
+  claimedParams   := some { n := 13, k := 1, d := 4 },
+  distanceProfile := surfaceDistanceBounds? 3 }
+
+-- rejected: declared d=3, but no theorem-backed exact-distance profile    (missingDistanceClaimSurface3)
+{ name := "surface3", decl := .surface 3,
+  claimedParams   := some { n := 13, k := 1, d := 3 },
+  distanceProfile := none }
+```
 
 ## Status & scope
 

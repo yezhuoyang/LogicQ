@@ -59,15 +59,35 @@ from [StabilizerProgram.lean](StabilizerProgram.lean) — `.bind` is the only va
 
 ## Example
 
-```lean
--- A single flipped check `c0 = -1` flips the syndrome `d0 = c0 ⊕ c2`.
-example : evalVar progReadout (fun k => decide (k = 0)) 3 = true := by decide
+`progReadout` (defined in [Syntax.lean:80](Syntax.lean#L80)) is itself a QStab `Prog`: it
+measures `ZZI`/`IZZ` over two rounds and forms syndrome parities `d0, d1` plus a logical
+output `o0`. As pure QStab syntax it is the list of statements (binding `c0..c4`, then
+`d0, d1, o0`):
 
--- …and leaves the logical output `o0 = c4` untouched.
-example : evalVar progReadout (fun k => decide (k = 0)) 7 = false := by decide
+```lean
+-- progReadout : Prog  (a distance-3 repetition-style syndrome + logical readout)
+[ .prop (some ⟨0, 0⟩) (ofString "ZZI"),   -- c0  (round 0, check ZZI)
+  .prop (some ⟨0, 1⟩) (ofString "IZZ"),   -- c1  (round 0, check IZZ)
+  .prop (some ⟨1, 0⟩) (ofString "ZZI"),   -- c2  (round 1, check ZZI)
+  .parity [0, 2],                          -- d0 = c0 ⊕ c2   (syndrome bit, var 3)
+  .prop (some ⟨1, 1⟩) (ofString "IZZ"),   -- c3  (round 1, check IZZ)
+  .parity [1, 4],                          -- d1 = c1 ⊕ c3   (syndrome bit, var 5)
+  .prop none (ofString "ZZZ"),            -- c4  (logical Z readout)
+  .parity [6] ]                            -- o0 = c4         (logical output, var 7)
 ```
 
-`progReadout` (defined in [Syntax.lean](Syntax.lean)) measures `ZZI`/`IZZ` over two rounds and forms syndrome parities `d0, d1` plus a logical output `o0`. These `by decide` tests, from [Semantics.lean](Semantics.lean), confirm that flipping the first physical measurement flips the corresponding syndrome bit but not the final logical-output parity.
+Evaluated on the outcome vector that flips only the first physical measurement
+(`c0 = -1`, all others `+1`), the bound variables come out as:
+
+```lean
+-- A single flipped check c0 = -1 flips the syndrome d0 = c0 ⊕ c2 …
+-- d0 (var 3)  =  true        -- flipped
+-- o0 (var 7)  =  false       -- logical output o0 = c4 untouched
+```
+
+These values, from [Semantics.lean:56](Semantics.lean#L56), confirm that flipping the first
+physical measurement flips the corresponding syndrome bit but not the final logical-output
+parity.
 
 ## Status & scope
 

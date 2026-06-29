@@ -56,19 +56,50 @@ theorem no_step_magic (I : MixedInterp Q) (caps : List Capability) (ob : MagicOb
 
 ## Example
 
+The fixtures the program runs against — a one-block environment holding a single bare
+qubit, and the `[[3,1,1]]` code it gets switched into (verbatim from
+[TypeChecker/Judgment/Switch/Examples.lean:17](../../TypeChecker/Judgment/Switch/Examples.lean#L17)):
+
 ```lean
--- SWITCH threads the environment (a genuine discriminator): encode the bare
--- qubit (n=1) into the [[3,1,1]] code (n=3), then apply the IDENTITY automorphism
--- `idMat 6` — a 2·3×2·3 map that is well-shaped ONLY for the n=3 post-switch block.
--- It is legal AFTER the switch …
-example : ok? (checkLogicalExec [] tsrc
-    [.switch 0 repCode3 { kind := .gaugeFix, f := encF }, .automorphism 0 (idMat 6)]) = true := by decide
--- … but the SAME automorphism is illegal WITHOUT the switch (block 0 is still n=1,
--- so `idMat 6` is not 2n×2n) — proving the post-switch env was threaded through:
-example : ok? (checkLogicalExec [] tsrc [.automorphism 0 (idMat 6)]) = false := by decide
+-- tsrc : TypedEnv — one bare logical qubit, n=1
+unenc1 = { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+
+-- repCode3 : Block — the [[3,1,1]] bit-flip repetition code (symplectic form, width 6)
+{ n := 3,
+  stab := [[false, false, false, true,  true,  false],    -- Z₀Z₁
+           [false, false, false, false, true,  true ]],    -- Z₁Z₂
+  lx := [[true,  true,  true,  false, false, false]],       -- X̄ = XXX
+  lz := [[false, false, false, true,  false, false]] }      -- Z̄ = Z₀
+
+-- encF : BoolMat — the encoding map X̄ ↦ XXX, Z̄ ↦ Z₀ (2 rows × 6)
+[[true, true, true, false, false, false],
+ [false, false, false, true, false, false]]
+
+-- idMat 6 : BoolMat — the 6×6 identity over GF(2) (the 2·3×2·3 IDENTITY automorphism)
+[[true,  false, false, false, false, false],
+ [false, true,  false, false, false, false],
+ [false, false, true,  false, false, false],
+ [false, false, false, true,  false, false],
+ [false, false, false, false, true,  false],
+ [false, false, false, false, false, true ]]
 ```
 
-These `by decide` tests show the checker threading the post-switch environment instruction-to-instruction: an automorphism legal only against the code produced by an earlier `switch`. Source: [Check.lean](Check.lean) (§5 executable tests).
+These two programs — both `LogicalExec = List MixedInstr` values over `tsrc` — are the
+checker's switch-env-threading discriminator. The IDENTITY automorphism `idMat 6` is a
+2·3×2·3 map that is well-shaped ONLY for the n=3 post-switch block:
+
+```lean
+-- OK: encode the bare qubit (n=1) into the [[3,1,1]] code (n=3), THEN the identity
+-- automorphism `idMat 6` — legal because block 0 is now n=3 after the switch.
+[ .switch 0 repCode3 { kind := .gaugeFix, f := encF }
+, .automorphism 0 (idMat 6) ]
+
+-- rejected: the SAME automorphism WITHOUT the switch — block 0 is still n=1, so
+-- `idMat 6` is not 2n×2n. (The checker threads the post-switch env through.)
+[ .automorphism 0 (idMat 6) ]
+```
+
+These values show the checker threading the post-switch environment instruction-to-instruction: an automorphism legal only against the code produced by an earlier `switch`. Source: [Check.lean](Check.lean) (§5 executable tests).
 
 ## Status & scope
 

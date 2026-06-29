@@ -44,15 +44,26 @@ or `badDimension`.
 
 ## Example
 
+The raw constructor input — a `1×2` ring matrix `A = [1, x]` at `ℓ = 3` (each circulant
+is an exponent list: `[0]` = `1`, `[1]` = `x`):
+
 ```lean
--- Lifted product tiny: ℓ=3, A = [1, x] (1×2 ring matrix), n = (1+4)·3 = 15.
-example : (Internal.liftedProduct 3 [[[0], [1]]] 1 2).n = 15 := by decide
-example : (Internal.liftedProduct 3 [[[0], [1]]] 1 2).cssCondition = true := by decide
+-- Lifted product tiny: ℓ=3, A = [1, x] (1×2 ring matrix).
+Internal.liftedProduct 3 [[[0], [1]]] 1 2
+-- ⇒ a CSSCode with  n = (1²+2²)·3 = 15  and  cssCondition = true  (hx·hzᵀ = 0)
+```
+
+The checked `?`-variant gates the same input on its declared `rA × nA` shape:
+
+```lean
+liftedProduct? 3 [[[0], [1]]] 1 2   -- OK: declared 1×2 = actual ⇒ some (… 15-qubit code …)
+liftedProduct? 3 [[[0], [1]]] 2 2   -- rejected: declared rA=2 ≠ actual 1 ⇒ none
+mkLiftedProduct 3 [[[0], [1]]] 1 2  -- OK: .ok ⟨…⟩  (CheckedCSSCode)
 ```
 
 A `1×2` ring matrix `A = [1, x]` at `ℓ = 3` yields a 15-qubit CSS code whose
-`hx · hzᵀ = 0` (the CSS condition) holds, checked by `decide`. Source:
-[Basic.lean](Basic.lean) (lines 31–33).
+`hx · hzᵀ = 0` (the CSS condition) holds. Source:
+[Basic.lean](Basic.lean) (lines 31–33, 43–44), [Checked.lean](Checked.lean) (line 27).
 
 ## Status & scope
 

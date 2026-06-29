@@ -61,7 +61,35 @@ theorem chainComplex_css (cc : ChainComplex) :
   rfl
 ```
 
-This headline theorem is the distinguishing feature of the front end: declaring a code as a chain complex whose well-typedness is `∂₁∘∂₂ = 0` is *exactly* declaring a code that elaborates to a commuting CSS code. It is exercised concretely on worked surface patches, e.g. `example : triangle.chainLaw = true := by decide` and `example : square.toCSS.cssCondition = true := by decide`. Source: [ChainComplex.lean](ChainComplex.lean).
+This headline theorem is the distinguishing feature of the front end: declaring a code as a chain complex whose well-typedness is `∂₁∘∂₂ = 0` is *exactly* declaring a code that elaborates to a commuting CSS code. It is exercised concretely on worked surface patches — these are the actual chain-complex values, written in ChainQ syntax (`structure ChainComplex`), each well-typed and elaborating to a commuting CSS code:
+
+```lean
+def triangle : ChainComplex :=                                  -- 1 face, 3 edges, 3 vertices
+  { nFaces := 1, nEdges := 3, nVerts := 3,
+    d2 := [[true, true, true]],                                 -- ∂(face) = e₀+e₁+e₂
+    d1 := [[true, true, false],                                 -- ∂e₀ = v₀+v₁
+           [false, true, true],                                 -- ∂e₁ = v₁+v₂
+           [true, false, true]] }                               -- ∂e₂ = v₂+v₀
+-- chainLaw = true  (∂₁∘∂₂ = 0)  ⇒  toCSS.cssCondition = true   -- OK: every vertex bounds two edges
+-- toCSS = { n := 3,
+--           hx := [[true, false, true], [true, true, false], [false, true, true]],
+--           hz := [[true, true, true]] }
+
+def square : ChainComplex :=                                    -- 1 face, 4 edges, 4 vertices (a 4-cycle)
+  { nFaces := 1, nEdges := 4, nVerts := 4,
+    d2 := [[true, true, true, true]],                           -- ∂(face) = e₀+e₁+e₂+e₃ (the XXXX plaquette)
+    d1 := [[true, true, false, false], [false, true, true, false],
+           [false, false, true, true], [true, false, false, true]] }
+-- chainLaw = true  ⇒  toCSS.cssCondition = true                -- OK: smallest surface-code plaquette
+
+def broken : ChainComplex :=                                    -- a NON-example
+  { nFaces := 1, nEdges := 2, nVerts := 2,
+    d2 := [[true, true]],
+    d1 := [[true, false], [false, true]] }                      -- ∂(face)=e0+e1, ∂e0=v0, ∂e1=v1
+-- rejected: ∂∂ = v0+v1 ≠ 0  ⇒  chainLaw = false, toCSS.cssCondition = false
+```
+
+Source: [ChainComplex.lean](ChainComplex.lean).
 
 ## Status & scope
 

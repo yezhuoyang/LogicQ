@@ -51,29 +51,47 @@ def ppmMeasToQStab (sched : Option QStab.Sched) (P : QStab.PauliString) : QStab.
   [ .prop sched P, .parity [0] ]
 ```
 
-The native fixture in this folder ([`Basic.lean`](Basic.lean)):
+The native fixture in this folder ([`Basic.lean`](Basic.lean)) — the `progZZ` definition and
+the QStab `Prog` value it unfolds to (`ppmMeasToQStab (some ⟨0,0⟩) "ZZ"` = `[.prop "ZZ", .parity [0]]`):
 
 ```lean
 def progZZ : QStab.Prog := LS.ppmMeasToQStab (some ⟨0, 0⟩) (Physical.ofString "ZZ")
+
+-- progZZ as a concrete QStab.Prog value:
+[ .prop (some ⟨0,0⟩) [Pauli.Z, Pauli.Z]   -- stmt 0: measure the ZZ parity (scheduled at slot ⟨0,0⟩)
+, .parity [0] ]                            -- stmt 1: read its outcome (the readout var = 1)
 ```
 
 ## Example
 
+The native `ZZ`-parity fixture (from [Basic.lean](Basic.lean)) — the `progZZ` program above
+plus the `certZZ` certificate VALUE it certifies:
+
 ```lean
--- The certificate's COMPUTABLE checks pass (parity nonempty, a preserved logical, all deferred).
-example : certZZ.check = true := by decide
--- DETECTOR DETERMINISM of the lowered program is genuinely checkable (noiseless ⇒ fixed readout).
-example : LS.SurgeryCert.detectorsDeterministic? progZZ LS.ppmMeasToQStab_readout = true := by decide
--- The fault obligations are explicitly DEFERRED (none certified) — honest by construction.
-example : certZZ.faults.allDeferred = true := by decide
--- A cert that (dishonestly) marked its distance CERTIFIED would FAIL `check`:
-example : LS.SurgeryCert.check { certZZ with faults := { distance := .certified } } = false := by decide
+-- The surgery certificate VALUE for the ZZ-parity measurement (the recorded surgery data
+-- with all fault obligations DEFERRED):
+def certZZ : LS.SurgeryCert where
+  measuredParity        := [Pauli.Z, Pauli.Z]      -- the measured logical Z-parity ("ZZ")
+  preservedLogicals     := [[Pauli.X, Pauli.X]]    -- the X-logical preserved by a Z-parity merge ("XX")
+  byproductFrame        := []                       -- +1 outcome ⇒ no byproduct (track-not-apply)
+  claimedMergedCommutes := true                     -- CLAIM: ZZ commutes with the data Z-stabilizers (CSS)
+  claimedDetectorsDet   := true                     -- CLAIM: noiseless ⇒ deterministic
+  claimedIrreducible    := true                     -- CLAIM: a single 2-qubit Z parity is irreducible
+  faults                := {}                        -- distance / fault-distance / decoder: all DEFERRED
 ```
 
-These `by decide` checks (from [Basic.lean](Basic.lean)) lower one logical `ZZ`-parity
-measurement to a well-formed QStab program, verify the certificate's structural checks and
-its noiseless detector determinism, and confirm that a certificate dishonestly claiming the
-distance obligation is `certified` is REJECTED by `check`.
+These values lower one logical `ZZ`-parity measurement to a well-formed QStab program and
+record its certificate; their checked outcomes (from [Basic.lean](Basic.lean)) are:
+
+```lean
+certZZ.check                                                       -- = true:  parity nonempty, a preserved logical, all deferred
+LS.SurgeryCert.detectorsDeterministic? progZZ                     -- = true:  noiseless ⇒ fixed readout (readout var = 1, in range, wf)
+certZZ.faults.allDeferred                                          -- = true:  none certified — honest by construction
+LS.SurgeryCert.check { certZZ with faults := { distance := .certified } }
+                                                                  -- = false: a cert dishonestly claiming `certified` distance is REJECTED
+certZZ.measuredParity                                              -- = [Pauli.Z, Pauli.Z]
+certZZ.preservedLogicals                                          -- = [[Pauli.X, Pauli.X]]
+```
 
 ## Status & scope
 

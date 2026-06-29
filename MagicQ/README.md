@@ -58,19 +58,55 @@ inductive Obligation
 
 ## Example
 
-```lean
-/-- RM15 resource arity (accept).  Exactly 15 compatible `T` resources check,
-    producing exactly ONE output and consuming all 15 inputs (+ the output). -/
-example : checks? ReedMuller15.rm15To1 = true := by decide
+The standard Bravyi–Kitaev 15-to-1 distillation protocol — the actual `rm15_to_1`
+program value in MagicQ source syntax ([Library/ReedMuller15.lean:152](Library/ReedMuller15.lean#L152)).
+It injects 15 supplied noisy `T` inputs (resources/carriers `0..14`), distills them to
+ONE improved `T` (resource `15`) on the `[[15,1,3]]` carrier, postselects `η = 0`, and
+outputs:
 
-/-- … the NON-Pauli Bravyi–Kitaev `A`-type syndrome (`η`) + decoding is recorded as a
-    deferred obligation — the binary CSS surrogate does NOT prove it. -/
-example :
-    ((checkProtocol ⟨[]⟩ ReedMuller15.rm15To1).toOption.map
-      (fun cp => cp.deferred.contains .bkATypeSyndrome)) = some true := by decide
+```lean
+-- OK: the canonical 15-to-1 protocol the checker ACCEPTS
+{ name   := "rm15_to_1"
+  params := { injectStyle := .unitary
+              notes := ["Bravyi–Kitaev 15-to-1, quant-ph/0403025",
+                        "input convention |A₀⟩ = T|+⟩ up to Clifford"] }
+  ops    :=
+    -- 15 supplied raw T inputs (inputInjections = (List.range 15).map injectInput):
+    [ .inject .supplied .T 0  (.external "noisy-T-input") 0  { rawError := some "ε" }
+    , .inject .supplied .T 1  (.external "noisy-T-input") 1  { rawError := some "ε" }
+    -- … carriers/resources 2..13, each `inject .supplied .T i (.external "noisy-T-input") i …`
+    , .inject .supplied .T 14 (.external "noisy-T-input") 14 { rawError := some "ε" } ]  -- (excerpt)
+    ++
+    [ .distill15To1 (List.range 15) 15 15 (.external "RM15-[[15,1,3]]")
+        { rawError    := some "ε"
+          outputError := some "ε_out = 35·ε^3 + O(ε^4)"
+          successProb := some "p_s = (1 + 15·(1 - 2ε)^8) / 16"
+          deferred    := ["ε < 0.141", "ε_out = 35·ε^3 + O(ε^4)",
+                          "p_s = (1 + 15·(1 - 2ε)^8) / 16",
+                          "output on Bravyi–Kitaev [[15,1,3]] code (distance 3 structural; not proven here)"] }
+        ["rm15.z-syndrome", "rm15.eta"]
+    , .postselect (.syndromeEq "rm15.eta" false)   -- η = 0
+    , .output 15 ]
+  spec   := ["p_s = (1 + 15·(1 - 2ε)^8) / 16", "ε < 0.141", "ε_out = 35·ε^3 + O(ε^4)",
+             "output on [[15,1,3]] code; distance 3 structural (deferred)"] }
 ```
 
-The checker ACCEPTS the standard 15-to-1 distillation, yet the non-Pauli `A`-type syndrome and decoding stay an explicit deferred obligation rather than being claimed as proven. Source: [Tests.lean](Tests.lean) (§1).
+Checking it accepts (exactly 15 compatible `T` inputs, one `T`-type output, all 16
+resources consumed, nothing leaked), while the non-Pauli pieces ride as deferred
+obligations rather than being claimed proven:
+
+```lean
+-- the deferred obligations the checker records for rm15_to_1 (CheckedProtocol.deferred):
+.distillThreshold "ε < 0.141"      -- the distillation threshold precondition
+.bkATypeSyndrome                   -- the NON-Pauli Bravyi–Kitaev A-type syndrome (η) + decoding
+                                   --   (the binary CSS surrogate does NOT prove it)
+
+-- rejected: fewer than 15 inputs (rm15To1Underfull — 14 inputs, distill15To1 over List.range 14)
+```
+
+The checker ACCEPTS the standard 15-to-1 distillation, yet the non-Pauli `A`-type
+syndrome and decoding stay an explicit deferred obligation rather than being claimed as
+proven. Source: [Tests.lean](Tests.lean) (§1), [Library/ReedMuller15.lean](Library/ReedMuller15.lean).
 
 ## Status & scope
 

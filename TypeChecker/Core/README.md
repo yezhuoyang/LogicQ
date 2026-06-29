@@ -56,17 +56,22 @@ def toTypedBlock? (cc : CheckedCSSCode) (clb : CheckedLogicalBasis) : Except Typ
 ## Example
 
 ```lean
--- a bare logical qubit is well-formed AND complete (k = 1 − rank [] = 1):
-example : Block.valid { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] } = true := by decide
--- REDUNDANT stabilizer generators are allowed (rank, not row count): XX twice ⇒ rank 1, k = 1:
-example : Block.valid { n := 2, stab := [[true, true, false, false], [true, true, false, false]],
-                        lx := [[true, false, false, false]], lz := [[false, false, true, true]] } = true := by decide
--- INCOMPLETE: n = 2, no stabilizers ⇒ k must be 2, but only one logical pair is exposed → invalid:
-example : Block.valid { n := 2, stab := [], lx := [[true, false, false, false]],
-                        lz := [[false, false, true, false]] } = false := by decide
+-- a bare logical qubit (X̄ = [1 0], Z̄ = [0 1]), no stabilizers — k = 1 − rank [] = 1:
+{ n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+-- OK: well-formed AND complete
+
+-- XX written twice ⇒ rank 1, k = 1 (redundant generators tolerated):
+{ n := 2, stab := [[true, true, false, false], [true, true, false, false]],
+  lx := [[true, false, false, false]], lz := [[false, false, true, true]] }
+-- OK: rank, not row count
+
+-- n = 2, no stabilizers ⇒ k must be 2, but only one logical pair is exposed:
+{ n := 2, stab := [], lx := [[true, false, false, false]],
+  lz := [[false, false, true, false]] }
+-- rejected: INCOMPLETE (k = n − rank stab not met — though this IS a legitimate `SubBlock`)
 ```
 
-These `by decide` smoke checks pin down the meaning of `Block.valid`: a bare qubit is valid, redundant generators are tolerated (rank, not row count), and an incomplete logical basis is rejected (though it is a legitimate `SubBlock`). Source: [Block.lean](Block.lean) (lines 116–126).
+These `Block` values pin down the meaning of `Block.valid`: a bare qubit is valid, redundant generators are tolerated (rank, not row count), and an incomplete logical basis is rejected (though it is a legitimate `SubBlock`). Source: [Block.lean](Block.lean) (lines 116–126).
 
 ## Status & scope
 

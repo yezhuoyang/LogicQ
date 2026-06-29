@@ -44,13 +44,13 @@ This layer should own merge, split, bridge, adapter, product-surgery, and
 batched-surgery nodes.
 ```
 
-(Source: this folder's own `README.md`.) A concrete, real lattice-surgery example —
-sparse-Pauli well-formedness pinned by `by decide` — lives instead in the implemented
-LSIR layer, [Compiler/LS/README.md](../Compiler/LS/README.md) (quoting
-`Compiler/LS/Syntax.lean`):
+(Source: this folder's own `README.md`.) A concrete, real lattice-surgery value — a
+well-formed sparse-Pauli measurement — lives instead in the implemented LSIR layer,
+[Compiler/LS/README.md](../Compiler/LS/README.md) (the actual `SPauli` value from
+[Compiler/LS/Syntax.lean:64](../Compiler/LS/Syntax.lean#L64)):
 
 ```lean
-example : SPauli.wfMeas [(0, .Z), (1, .Z)] = true := by decide
+[(0, .Z), (1, .Z)]      -- OK: a well-formed 2-body ZZ readout (densifies on 3 qubits to "ZZI")
 ```
 
 ## Status & scope

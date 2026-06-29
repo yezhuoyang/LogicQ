@@ -50,15 +50,29 @@ are the checked wrappers that reject `ℓ = 0`, `m = 0`, or empty `A`/`B`.
 
 ## Example
 
+A concrete BB code value — the bivariate-bicycle instance with `ℓ = m = 3`,
+`A = 1 + x + y²` (exponents `[(0,0),(1,0),(0,2)]`), `B = 1 + x² + y` (exponents
+`[(0,0),(2,0),(0,1)]`):
+
 ```lean
--- Bivariate bicycle, ℓ=m=3 (n = 18): A = 1 + x + y², B = 1 + x² + y.
-example : (Internal.bb 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]).n = 18 := by decide
-example : (Internal.bb 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]).cssCondition = true := by decide
-example : hasShape (Internal.bb 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]).hx 9 18 = true := by decide
+-- The BB program/value (raw constructor): n = 18, CSS ✓, hx is a 9×18 matrix.
+Internal.bb 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]
+--   .n            = 18          -- n = 2·ℓ·m
+--   .cssCondition = true        -- Hx·Hzᵀ = A·B + B·A = 0
+--   .hx           : 9 × 18      -- hasShape … 9 18
 ```
 
-A concrete `n = 18` BB instance whose dimension, CSS condition, and `hx` shape
-are all discharged by `decide`. Source: [Basic.lean](Basic.lean) (§4 Tests).
+The same parameters through the checked wrappers (`bb?`, `mkBB`):
+
+```lean
+bb? 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]   -- OK: some (the n = 18 instance)
+bb? 0 3 [(0,0)] [(0,0)]                            -- rejected: ℓ = 0 ⇒ none
+
+mkBB 3 3 [(0,0),(1,0),(0,2)] [(0,0),(2,0),(0,1)]  -- OK: a CheckedCSSCode
+mkBB 0 3 [(0,0)] [(0,0)]                           -- rejected: degenerateParam "BB: ℓ and m must be ≥ 1"
+```
+
+Source: [Basic.lean](Basic.lean) (§4 Tests), [Checked.lean](Checked.lean) (§4 Tests).
 
 ## Status & scope
 

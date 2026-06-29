@@ -56,14 +56,15 @@ theorem progH_frame (I : QInterp Q) (ρ : Q) (s₁ s₂ : Sign) :
 
 ## Example
 
+These are `MTarget` values (logical Pauli products) in the QMeas alphabet. With `dataQ i = ⟨0,i⟩` and `ancQ i = ⟨1,i⟩` ([Syntax.lean](Syntax.lean)), the underlying data is:
+
 ```lean
--- The example programs use only well-formed (1- or 2-qubit) measurements.
-example : MTarget.wf [(dataQ 0, .Z), (ancQ 0, .X)] = true := by decide
-example : MTarget.wf [(dataQ 0, .X)] = true := by decide
-example : MTarget.wf [(dataQ 0, .Z), (dataQ 0, .X)] = false := by decide  -- repeated qubit rejected
+[(⟨0,0⟩, .Z), (⟨1,0⟩, .X)]   -- OK: M_{ZX}(q0, a0) — a 2-body joint logical measurement
+[(⟨0,0⟩, .X)]                -- OK: M_X(q0) — a single-qubit logical measurement
+[(⟨0,0⟩, .Z), (⟨0,0⟩, .X)]   -- rejected: repeated logical qubit
 ```
 
-These `by decide` checks confirm the native measurement alphabet: a target must have one or two factors and must not repeat a logical qubit. Source: [Syntax.lean](Syntax.lean) (lines 183-185).
+The native measurement alphabet requires one or two factors with no repeated logical qubit. Source: [Syntax.lean](Syntax.lean) (lines 183-185).
 
 ## Status & scope
 

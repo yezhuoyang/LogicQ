@@ -39,20 +39,40 @@ def ppmObligations : CapKind → List String
 
 ## Example
 
-There is no example in this folder (it is a stub). The closest representative checked example is the tiny logical `ZZ`-parity surgery fixture in the sibling shim [`../../Compiler/LS2QStab/Basic.lean`](../../Compiler/LS2QStab/Basic.lean):
+There is no example in this folder (it is a stub). The closest representative checked value is the tiny logical `ZZ`-parity surgery fixture in the sibling shim [`../../Compiler/LS2QStab/Basic.lean`](../../Compiler/LS2QStab/Basic.lean). The fixture is one logical `ZZ`-parity measurement on a 2-physical-qubit interface — `progZZ = LS.ppmMeasToQStab (some ⟨0,0⟩) (ofString "ZZ")`, which is just the QStab program:
 
 ```lean
--- The lowered program is WELL-FORMED (the parity references only the bound prop).
-example : progZZ.wf = true := by decide
--- The certificate's COMPUTABLE checks pass (parity nonempty, a preserved logical, all deferred).
-example : certZZ.check = true := by decide
--- DETECTOR DETERMINISM of the lowered program is genuinely checkable (noiseless ⇒ fixed readout).
-example : LS.SurgeryCert.detectorsDeterministic? progZZ LS.ppmMeasToQStab_readout = true := by decide
--- The fault obligations are explicitly DEFERRED (none certified) — honest by construction.
-example : certZZ.faults.allDeferred = true := by decide
+-- progZZ : the lowered surgery program (one measured Z-parity + its readout parity).
+[ .prop (some ⟨0,0⟩) (ofString "ZZ")    -- measure the logical ZZ parity (binds QVar 0)
+, .parity [0] ]                          -- the readout parity (QVar 1)
 ```
 
-These `by decide` checks (contract tier **D**) verify well-formedness, the certificate's computable checks, and detector determinism for a single logical Z-parity merge, while the distance / fault-distance / decoder obligations stay **deferred**.
+and the surgery certificate it carries ([`../../Compiler/LS2QStab/Basic.lean:32`](../../Compiler/LS2QStab/Basic.lean#L32)):
+
+```lean
+-- certZZ : LS.SurgeryCert — the surgery data for the ZZ-parity merge.
+{ measuredParity        := [Pauli.Z, Pauli.Z]      -- the measured Z-parity (ofString "ZZ")
+  preservedLogicals     := [[Pauli.X, Pauli.X]]    -- the X-logical preserved by a Z-parity merge
+  byproductFrame        := []                       -- +1 outcome ⇒ no byproduct (track-not-apply)
+  claimedMergedCommutes := true                     -- CLAIM: ZZ commutes with the data Z-stabilizers (CSS)
+  claimedDetectorsDet   := true                     -- CLAIM: noiseless ⇒ deterministic
+  claimedIrreducible    := true                     -- CLAIM: a single 2-qubit Z parity is irreducible
+  faults                := {} }                      -- distance / fault-distance / decoder: all DEFERRED
+```
+
+For this fixture the computable surgery checks (contract tier **D**) hold — the lowered `progZZ` is well-formed, `certZZ`'s computable checks pass (parity nonempty, a preserved logical, all faults deferred), detector determinism is genuine (noiseless ⇒ fixed readout, and a flipped physical outcome flips the readout), and the fault obligations are explicitly deferred (none certified):
+
+```lean
+-- OK: well-formed, checks pass, deterministic, faults all deferred.
+progZZ.wf
+certZZ.check
+LS.SurgeryCert.detectorsDeterministic? progZZ LS.ppmMeasToQStab_readout
+certZZ.faults.allDeferred
+-- rejected: a cert that dishonestly marked its distance CERTIFIED fails `check`.
+LS.SurgeryCert.check { certZZ with faults := { distance := .certified } }
+```
+
+These computable checks verify well-formedness, the certificate's computable checks, and detector determinism for a single logical Z-parity merge, while the distance / fault-distance / decoder obligations stay **deferred**.
 
 ## Status & scope
 

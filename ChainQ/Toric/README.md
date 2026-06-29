@@ -34,17 +34,40 @@ theorem mkToric_sound {d : Nat} {cc : CheckedCSSCode} (h : mkToric d = .ok cc) :
 
 ## Example
 
+The toric family is built from cyclic repetition codes. `repCyc d` is the `d×d`
+parity-check matrix with `1`s at columns `i` and `(i+1) mod d` in row `i`
+([Repetition.lean:22](../HGPCode/Repetition.lean#L22)):
+
 ```lean
-/-- A successful `mkToric` yields exactly `toric d`, and it is valid. -/
-theorem mkToric_sound {d : Nat} {cc : CheckedCSSCode} (h : mkToric d = .ok cc) :
-    cc.code = toric d ∧ cc.code.valid = true := by
-  unfold mkToric at h
-  split at h
-  · contradiction
-  · exact ⟨mkCSS_sound h, cc.valid⟩
+-- repCyc 2  (the input code for toric 2)
+[ [1, 1]
+, [1, 1] ]
+
+-- repCyc 3  (the input code for toric 3)
+[ [1, 1, 0]
+, [0, 1, 1]
+, [1, 0, 1] ]
 ```
 
-The soundness theorem: whenever `mkToric d` returns `.ok cc`, the underlying code is exactly `toric d` and it satisfies the CSS validity check (`Hx * Hzᵀ = 0`). Source: [Checked.lean](Checked.lean).
+`toric d = HGP(repCyc d, repCyc d)`, so `toric 2` is the `[[8, 2, 2]]` code and
+`toric 3` is the `[[18, 2, 3]]` code. The concrete materialized values
+([Basic.lean:22](Basic.lean#L22), [Checked.lean:33](Checked.lean#L33)):
+
+```lean
+toric 3 . n      = 18      -- OK: n = 2·3²
+toric 3 . valid  = true    -- OK: Hx · Hzᵀ = 0
+toric 2 . valid  = true    -- OK: Hx · Hzᵀ = 0
+
+toric? 2 . isSome = true    -- OK: d ≥ 2 accepted ⇒ some (toric 2)
+toric? 0          = none    -- rejected: d < 2
+
+mkToric 2  -- OK: .ok ⟨toric 2, valid⟩
+mkToric 1  -- rejected: .error (.degenerateParam "toric code needs d ≥ 2")
+```
+
+The soundness theorem (stated above): whenever `mkToric d` returns `.ok cc`, the
+underlying code is exactly `toric d` and it satisfies the CSS validity check
+(`Hx * Hzᵀ = 0`). Source: [Checked.lean](Checked.lean).
 
 ## Status & scope
 

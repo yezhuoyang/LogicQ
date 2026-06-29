@@ -55,15 +55,16 @@ theorem checkPPMStmt_no_use_after_discard (Γ : TypedEnv) (caps : List Capabilit
 
 ## Example
 
+A PPM program is a `Stmt` (the AST above; `;;` is `Stmt.seq`), checked over the bare-qubit env `tenvQ` (block `0`, one logical qubit `⟨0,0⟩`). The following value pins the dead-set *union* join across an `ite`:
+
 ```lean
 -- ite branch UNION: discarding ⟨0,0⟩ in ONE branch marks it dead afterward, so a
 -- following frame is rejected (would be ACCEPTED under intersection/empty-join):
-example : (match checkPPMProgram tenvQ []
-    (.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)] ;; .ite 0 (.discard ⟨0, 0⟩) .skip ;; .frame ⟨0, 0⟩ .X) with
-    | .error (.useAfterDiscard _ _) => true | _ => false) = true := by decide
+.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)] ;; .ite 0 (.discard ⟨0, 0⟩) .skip ;; .frame ⟨0, 0⟩ .X
+-- rejected: useAfterDiscard ⟨0,0⟩ — discarded in one ite branch, then framed
 ```
 
-Discarding `⟨0,0⟩` in only one branch of an `ite` still marks it dead afterward (branch joins take the set *union* of the two branches' dead sets), so the subsequent `frame` on that qubit is rejected as a use-after-discard. This `by decide` test discriminates the union join from an intersection/empty join. Source: [Examples.lean](Examples.lean).
+Discarding `⟨0,0⟩` in only one branch of an `ite` still marks it dead afterward (branch joins take the set *union* of the two branches' dead sets), so the subsequent `frame` on that qubit is rejected as a use-after-discard. This value discriminates the union join from an intersection/empty join. Source: [Examples.lean](Examples.lean).
 
 ## Status & scope
 

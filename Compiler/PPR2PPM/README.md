@@ -46,14 +46,27 @@ theorem CompiledPPM.targets_valid {Γ : TypedEnv} {caps : List Capability}
 
 ## Example
 
+The fragments are `PPM.Stmt` values checked under `tenvQ` (a `TypedEnv` holding the
+single bare logical qubit `q0`, [TypeChecker/Judgment/PPM/Examples.lean:17](../../TypeChecker/Judgment/PPM/Examples.lean#L17),26)
+with no capabilities. The raw PPM programs:
+
 ```lean
--- a native single-qubit measurement fragment validates into evidence:
-example : ok? (mkCompiledPPM? tenvQ [] (.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)])) = true := by decide
--- an empty / non-native measurement fragment is rejected:
-example : ok? (mkCompiledPPM? tenvQ [] (.meas 0 [])) = false := by decide
+-- the native single-qubit measurement fragment — binds outcome r=0 to M_Z on logical qubit ⟨0,0⟩:
+.meas 0 [(⟨0, 0⟩, PPM.PLetter.Z)]   -- OK: validates into proof-carrying evidence
+-- the empty measurement fragment (no Pauli factors):
+.meas 0 []                          -- rejected: non-native / empty measurement list
 ```
 
-These two `by decide` tests (D-tier) show that a single-qubit `Z` measurement on logical qubit `⟨0,0⟩` validates into proof-carrying evidence under `tenvQ` with no capabilities, while an empty measurement list is rejected.
+`tenvQ` is the typed environment that contains exactly the bare qubit `q0`
+([TypeChecker/Judgment/PPM/Examples.lean:17](../../TypeChecker/Judgment/PPM/Examples.lean#L17)):
+
+```lean
+def q0 : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+def tenvQ : TypedEnv := ⟨[⟨q0, by decide⟩]⟩
+```
+
+The single-qubit `Z` measurement on logical qubit `⟨0,0⟩` validates into proof-carrying
+evidence under `tenvQ`; the empty measurement list is rejected.
 
 Source: [Basic.lean](Basic.lean) (lines 55-58).
 
@@ -62,7 +75,7 @@ Source: [Basic.lean](Basic.lean) (lines 55-58).
 Honest scope, mirroring [Compiler/CONTRACT.md](../CONTRACT.md):
 
 - **Proved (P):** the three `theorem`s — `CompiledPPM.wellFormed`, `CompiledPPM.meas_legal`, and `CompiledPPM.targets_valid` — are universally-quantified soundness statements over any compiled fragment. They establish well-formedness, measurement legality (via `checkPPMStmt_meas_sound`), and target validity (via `checkPPMStmt_targets_valid`) at the **type-checking** level only.
-- **Decided (D):** the two `example ... := by decide` smoke tests above.
+- **Decided (D):** the two PPM fragments above — the single-qubit `Z` measurement accepts, the empty measurement list rejects (decided by `by decide` smoke tests in [Basic.lean](Basic.lean)).
 - **Planned / stub (M):** the actual PPR-to-PPM lowering pass. There is **no** code here that lowers Pauli-product rotations to adaptive PPM, and **no** denotational/operational-equivalence theorem of the intended shape `denote(PPR program) = semantics(lowered PPM program)`. Magic-resource tracking for such a pass is likewise not present.
 
 Nothing here makes a channel-correctness, fault-tolerance, distance, or decoder claim; the guarantees are confined to TypeChecker legality of a measurement fragment.

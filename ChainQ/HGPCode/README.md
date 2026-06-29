@@ -41,15 +41,30 @@ def mkHGP (h1 h2 : BoolMat) (m1 n1 m2 n2 : Nat) : Except ChainQError CheckedCSSC
 
 ## Example
 
-```lean
--- accepts:
-example : isOk (mkHGP (repOpen 3) (repOpen 3) 2 3 2 3) = true := by decide
+The classical input is `repOpen 3`, the distance-3 open-boundary repetition code — a
+`2×3` `BoolMat` (row `i` has `1`s at columns `i`, `i+1`):
 
--- rejects, with the RIGHT reason:
-example : (match mkHGP (repOpen 3) (repOpen 3) 5 3 2 3 with | .error (.badDimension _) => true | _ => false) = true := by decide
+```lean
+-- repOpen 3 : BoolMat   (2 rows × 3 cols, so its true shape is m = 2, n = 3)
+[[true, true, false],
+ [false, true, true]]
 ```
 
-These two `by decide` tests show `mkHGP` accepting a well-shaped HGP of two distance-3 repetition codes, and rejecting a declared `m1 = 5` that disagrees with the actual matrix shape `2` — returning the specific `.badDimension` error. Source: [Checked.lean](Checked.lean).
+Feeding two copies to the checked HGP constructor:
+
+```lean
+-- mkHGP (repOpen 3) (repOpen 3) 2 3 2 3
+--   OK: declared shapes (m1=2,n1=3,m2=2,n2=3) match the actual 2×3 matrices.
+--       ⇒ .ok (CheckedCSSCode with n = n1·n2 + m1·m2 = 3·3 + 2·2 = 13)
+
+-- mkHGP (repOpen 3) (repOpen 3) 5 3 2 3
+--   rejected: declared m1 = 5 disagrees with the actual matrix shape (2 rows).
+--       ⇒ .error (.badDimension "HGP: a declared dimension disagrees with the actual matrix shape")
+```
+
+These two values show `mkHGP` accepting a well-shaped HGP of two distance-3 repetition
+codes, and rejecting a declared `m1 = 5` that disagrees with the actual matrix shape `2` —
+returning the specific `.badDimension` error. Source: [Checked.lean](Checked.lean).
 
 ## Status & scope
 

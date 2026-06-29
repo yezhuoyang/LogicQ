@@ -71,24 +71,152 @@ load-bearing result:
 theorem lower_dataflow (p : Program) : (lower p).dataflow = p.dataflow
 ```
 
-## Example
+## Worked example — one program at every level of the stack
 
-```lean
--- a 2-body `ZZ` is a well-formed measurement; its dense form on 3 qubits is `ZIZ`/`ZZI`:
-example : SPauli.wfMeas [(0, .Z), (1, .Z)] = true := by decide
-example : SPauli.toDense 3 [(0, .Z), (2, .Z)] = ofString "ZIZ" := by decide
--- an identity factor is rejected, a duplicate qubit is rejected, an empty measurement is rejected:
-example : SPauli.wf [(0, .I)] = false := by decide
-example : SPauli.wf [(0, .Z), (0, .X)] = false := by decide
-example : SPauli.wfMeas ([] : SPauli) = false := by decide
--- an out-of-range factor is caught by `inRange`:
-example : SPauli.inRange 2 [(0, .Z), (5, .Z)] = false := by decide
+To see where LS sits, follow a real **QASMBench** program — `deutsch_n2` (2 qubits) —
+from OpenQASM text down to physical `QStab`, running on a real quantum-LDPC code. Every
+box below is an actual type / value in the tree (file:line cited). Levels 0–3 are a single
+front-end pipeline (`Compiler.QASM.compileQASMToMixIR?`); levels 4–6 are the LS → QStab →
+physical path that consumes the PPM / MagicQ fragments produced at level 3.
+
+```text
+QASM text ─►(parse)─► QASMProgram ─►(allocate onto a ChainQ code)─► ChainQPrimProgram
+   level 0              level 1                                        level 2
+        ─►(lower)─► MixedIR (List MixedInstr) ─►(PPM/MagicQ fragments)─► LS Program
+                    level 3                                              level 4  ◄── THIS module
+        ─►(lower)─► QStab.StabilizerProg + sidecar ─►(QStab2QClifford)─► QClifford / physical
+                    level 5                                              level 6
 ```
 
-These `by decide` tests ([Syntax.lean](Syntax.lean), lines 64-71) pin down the
-sparse-Pauli well-formedness discipline: a measurement must be non-empty, free of
-identity factors and duplicate qubits, and in range, and it densifies to the expected
-`QStab.PauliString`.
+### Level 0 — OpenQASM text (the input)
+
+The `deutsch_n2` benchmark, embedded verbatim from pnnl/QASMBench
+([Compiler/QASM/Benchmarks.lean:177](../QASM/Benchmarks.lean#L177)):
+
+```qasm
+OPENQASM 2.0;
+qreg q[2];  creg c[2];
+x q[1];  h q[0];  h q[1];  cx q[0],q[1];  h q[0];
+measure q[0] -> c[0];  measure q[1] -> c[1];
+```
+
+### Level 1 — `QASMProgram` (parsed)
+
+`parseOpenQASM2? : String → Except ParseError QASMProgram`
+([Compiler/QASM/Parse.lean:266](../QASM/Parse.lean#L266)) produces:
+
+```lean
+{ qregs := [⟨"q", 2⟩], cregs := [⟨"c", 2⟩]
+  instrs := [.x ⟨"q",1⟩, .h ⟨"q",0⟩, .h ⟨"q",1⟩, .cx ⟨"q",0⟩ ⟨"q",1⟩, .h ⟨"q",0⟩,
+             .measure ⟨"q",0⟩ ⟨"c",0⟩, .measure ⟨"q",1⟩ ⟨"c",1⟩] }
+```
+
+### Level 2 — allocation onto a QEC code → `ChainQPrimProgram`
+
+`allocate? : QASMProgram → AllocationRequest → Except QASMError Allocation`
+([Compiler/QASM/Allocate.lean:193](../QASM/Allocate.lean#L193)) maps each virtual qubit
+`q[i]` first-fit to a named logical qubit of a **ChainQ code block** supplied in
+`AllocationRequest.decls`. The code can be any ChainQ code — including a real **lifted-product
+qLDPC code** (Panteleev–Kalachev, [ChainQ/LiftedProduct/Basic.lean:19](../../ChainQ/LiftedProduct/Basic.lean#L19)):
+
+```lean
+ChainQ.Internal.liftedProduct 3 [[[0], [1]]] 1 2   -- ℓ=3, A = [1, x] ⇒ n = (1²+2²)·3 = 15, CSS ✓
+```
+
+(The *curated benchmark* suite allocates each virtual qubit to a **bare** block to isolate
+the front-end; the code-family path [Compiler/Demo/Families.lean](../Demo/Families.lean) runs
+surface / toric / HGP / lifted-product codes end-to-end.) Allocation emits a
+`ChainQPrimProgram` of *named* ChainQ ops (`.xGate`, `.hGate`, `.cnotGate`, `.measure`, …,
+[Compiler/ChainQ2Mixed/Compile.lean](../ChainQ2Mixed/Compile.lean)).
+
+### Level 3 — MixedIR (`List MixedInstr`) — covering all the mixed-IR variants
+
+`compileChainQToMixIR?` lowers to `LogicalExec = List MixedInstr`
+([Compiler/Mixed/Syntax.lean:36](../Mixed/Syntax.lean#L36)) — the proof-carrying mixed
+gate/measurement/surgery IR. **All eight** variants:
+
+```lean
+inductive MixedInstr
+  | ppm                  (s : PPM.Stmt)                 -- native PPM/PPU fragment (measurements, gadgets)  ── feeds LS
+  | transversal          (b : Nat) (g : BoolMat)        -- local single-qubit transversal (H, S)
+  | transversalCNOT      (spec) | transversalCNOTBatch (spec)  -- inter-block (high-rate) logical CNOT
+  | automorphism         (b : Nat) (M : BoolMat)        -- a symplectic logical automorphism
+  | switch               (b : Nat) (D : Block) (cert : SwitchCert)  -- a code switch (reuses TypeChecker.checkSwitch)
+  | magic                (ob : MagicObligation)         -- a deferred typed T-gate obligation  ── feeds MagicQ → LS
+  | pauli                (q : LQubit) (p : PPM.PLetter) -- a logical Pauli applied to the carrier
+```
+
+`deutsch_n2` exercises three of them: `x`/`h` → `.pauli` / `.transversal`, `cx` →
+`.transversalCNOT` (or a PPM CNOT gadget `.ppm`), and the two `measure`s → `.ppm (.meas …)`
+(its real resource counts: 2 qubits, 7 mixed instructions, 2 measurements, 1 two-qubit gate —
+[Benchmarks.lean:1384](../QASM/Benchmarks.lean#L1384)). A concrete compiled snippet — the
+program `measure Z on q0 ; H q0` ([Compiler/Mixed/Lower/Examples.lean:26](../Mixed/Lower/Examples.lean#L26)):
+
+```lean
+[ .ppm (.meas 0 [(⟨0,0⟩, PPM.PLetter.Z)]), .transversal 0 hGate2x2 ]   -- hGate2x2 = [[F,T],[T,F]]
+```
+
+### Level 4 — LS (the surgery IR — **this module**)
+
+The `.ppm` fragments (and, for `magic`, the MagicQ cultivation chunks) are exactly what LS
+owns. The PPM → LS adapter `ppmMeasToLS?`
+([PPM.lean:27](PPM.lean#L27)) turns a PPM measurement + physical witness into an LS `meas`
+op (it *refuses* without a witness):
+
+```lean
+def ppmZZ     : PPM.MTarget := [(⟨0,0⟩, .Z), (⟨1,0⟩, .Z)]   -- a 2-body ZZ lattice-surgery readout
+def witnessZZ : SPauli      := [(0, .Z), (1, .Z)]
+-- ppmMeasToLS? (some ⟨0,0⟩) ppmZZ (some witnessZZ)  ⇒  .ok (.meas (some ⟨0,0⟩) [(0,.Z),(1,.Z)])
+```
+
+An LS `Program` carries those `meas` ops plus the surgery sidecar (detectors / observables /
+postselection / flows). The canonical LS example ([Check.lean:272](Check.lean#L272)):
+
+```lean
+def goodProg : Program :=
+  { numQubits := 2
+    ops := [ .meas (some ⟨0,0⟩) [(0,.Z),(1,.Z)]                        -- c0 (binds QVar 0)
+           , .meas (some ⟨1,0⟩) [(0,.Z),(1,.Z)]                        -- c1 (binds QVar 1)
+           , .detector { name := "d0", srcs := [0,1], tags := ["color"] }  -- d0 = c0 ⊕ c1
+           , .observable "o0" [0]
+           , .postselect (.byDetector "d0")
+           , .postselect (.byTag "color") ] }
+```
+
+### Level 5 — QStab (the physical stabilizer-measurement IR)
+
+`lower : Program → QStab.StabilizerProg` ([LowerQStab.lean:46](LowerQStab.lean#L46)) maps each
+executable LS op 1:1. `goodProg` becomes (densifying each sparse Pauli):
+
+```lean
+[ .bind (.prop (some ⟨0,0⟩) (ofString "ZZ")), .bind (.prop (some ⟨1,0⟩) (ofString "ZZ")) ]
+```
+
+The theorem `lower_dataflow` proves the classical dataflow `[.prop "ZZ", .prop "ZZ"]` is
+**preserved**; the detector / observable / postselect ride in the sidecar (`Checked`), never
+silently dropped.
+
+### Level 6 — physical
+
+`QStab2QClifford` ([Compiler/QStab2QClifford/Compile.lean](../QStab2QClifford/Compile.lean))
+lowers each `.prop` to a concrete syndrome-extraction gadget (direct / Shor / Knill / flag) →
+a QClifford circuit; `compile?_trace_correct` proves the circuit realizes the QStab classical
+dataflow (the compiler dataflow contract — **not** fault tolerance).
+
+### The LS well-formedness discipline (level 4, in detail)
+
+A sparse Pauli used as an LS `meas` must be **non-empty**, **identity-free**,
+**duplicate-qubit-free**, and **in range** for the patch, and it densifies to a
+`QStab.PauliString` ([Syntax.lean](Syntax.lean)):
+
+```lean
+[(0, .Z), (1, .Z)]      -- OK: a 2-body ZZ readout (densifies on 3 qubits to "ZZI")
+[(0, .Z), (2, .Z)]      -- OK: densifies on 3 qubits to "ZIZ"
+[(0, .I)]               -- rejected: an identity factor
+[(0, .Z), (0, .X)]      -- rejected: a duplicate qubit
+[]                      -- rejected: an empty measurement
+[(0, .Z), (5, .Z)]      -- rejected on a 2-qubit patch: out of range
+```
 
 ## Status & scope
 

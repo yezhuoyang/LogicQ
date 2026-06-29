@@ -64,13 +64,14 @@ rows over the merged `2·(Σ n_block + ancN)`-wide symplectic space.
 private def capW8 : Capability :=
   { kind := .adapterPPM, blocks := [0, 1], ancN := 0,
     connStab := [[false, false, false, false, true, true, false, false]] }
-example : ok? (mkCapability? capW8 4) = true := by decide
-example : ok? (mkCapability? capW8 3) = false := by decide
+
+-- capW8 against mergedN = 4:  -- OK: connStab row width 8 = 2·4, builds a CheckedCapability
+-- capW8 against mergedN = 3:  -- rejected: row width 8 ≠ 2·3 = 6 (shapeMismatch)
 ```
 
-A `decide`-checked sanity test: an 8-wide connection-stabilizer row validates as a
-`CheckedCapability` for `mergedN = 4` (width `2·4 = 8`) and is rejected for
-`mergedN = 3`. Source: [Defs.lean](Defs.lean) (lines 56-61).
+An 8-wide connection-stabilizer row validates as a `CheckedCapability` for
+`mergedN = 4` (width `2·4 = 8`) and is rejected for `mergedN = 3`.
+Source: [Defs.lean](Defs.lean) (lines 56-61).
 
 ## Status & scope
 

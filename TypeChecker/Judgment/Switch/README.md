@@ -10,7 +10,7 @@ This folder is the `Switch` judgment of the LogicQ TypeChecker. It sits between 
 |--------|------|
 | [Cert.lean](Cert.lean) | `SwitchKind`, the `SwitchCert` (kind + symplectic map `f`), and the `TypedSwitch` evidence record |
 | [Check.lean](Check.lean) | `checkSwitch` and its distance-strengthened / raw-env entry points, plus the `CheckedSwitchCert` shape-proven certificate |
-| [Examples.lean](Examples.lean) | Worked example: encode a bare qubit into the `[[3,1,1]]` repetition code, with `by decide` legality and rejection tests |
+| [Examples.lean](Examples.lean) | Worked example: encode a bare qubit into the `[[3,1,1]]` repetition code, with legal and rejected switch certificates |
 
 ## Key definitions
 
@@ -52,21 +52,43 @@ The checker requires: the source block exists, is `live`, and is `Owned.owned` (
 
 ## Example
 
+The worked example switches one bare qubit C into the `[[3,1,1]]` bit-flip
+repetition code D. These are the actual blocks and the switch certificate, in
+ChainQ symplectic syntax (`Block`s carry `stab`/`lx`/`lz`; `f` is the
+cross-code symplectic map). Source: [Examples.lean](Examples.lean).
+
 ```lean
+-- Source code C: one bare logical qubit (X̄ = X, Z̄ = Z), width 2.
+def unenc1 : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+
+-- Target code D: the [[3,1,1]] bit-flip repetition code (symplectic form, width 6).
+def repCode3 : Block :=
+  { n := 3,
+    stab := [[false, false, false, true,  true,  false],    -- Z₀Z₁
+             [false, false, false, false, true,  true ]],    -- Z₁Z₂
+    lx := [[true,  true,  true,  false, false, false]],       -- X̄ = XXX
+    lz := [[false, false, false, true,  false, false]] }      -- Z̄ = Z₀
+
+-- The switch certificate: kind gaugeFix, map f sends X̄ ↦ XXX, Z̄ ↦ Z₀ (2 rows × 6).
 def encF : BoolMat := [[true, true, true, false, false, false],
                        [false, false, false, true, false, false]]
 
--- The encode-into-repetition switch is legal:
-example : ok? (checkSwitch tsrc 0 tdst { kind := .gaugeFix, f := encF }) = true := by decide
--- …and it preserves the logical operators (induced X̄ = XXX, Z̄ = Z₀):
-example : (res? (checkSwitch tsrc 0 tdst { kind := .gaugeFix, f := encF })).map (·.2.inducedLX)
-            = some [[true, true, true, false, false, false]] := by decide
+{ kind := .gaugeFix, f := encF }
+-- OK: encode-into-repetition is legal; the induced logical operators are
+--     X̄ = [[true,true,true,false,false,false]] (XXX), Z̄ = Z₀.
 
--- a degenerate map (everything ↦ 0) does not preserve the logical operators;
-example : ok? (checkSwitch tsrc 0 tdst { kind := .gaugeFix, f := zeroMat 2 6 }) = false := by decide
+{ kind := .gaugeFix, f := zeroMat 2 6 }
+-- rejected: degenerate all-zero map does not preserve the logical operators.
+
+{ kind := .gaugeFix, f := encF }   -- against a borrowed source slot
+-- rejected: a borrowed block cannot be switched (switching consumes the block).
+
+{ kind := .gaugeFix, f := encF }   -- against block id 3 (no such block)
+-- rejected: unknown block id.
+
+{ kind := .gaugeFix, f := [[true]] }
+-- rejected: certificate shape must be exactly 2·n_C × 2·n_D (here 2×6); a 1×1 f is malformed.
 ```
-
-The map `f` encodes the bare logical qubit into the `[[3,1,1]]` bit-flip repetition code, sending `X̄ ↦ XXX` and `Z̄ ↦ Z₀`; the legality and logical-preservation are settled by `decide`, and a degenerate all-zero map is rejected. Source: [Examples.lean](Examples.lean).
 
 ## Status & scope
 

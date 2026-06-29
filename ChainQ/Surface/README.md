@@ -34,17 +34,27 @@ theorem mkSurface_sound {d : Nat} {cc : CheckedCSSCode} (h : mkSurface d = .ok c
 
 ## Example
 
+The concrete `CSSCode` values produced by `surface d` (from [Basic.lean](Basic.lean)),
+with the dimensions/shapes/validity they materialize to — `n = d² + (d−1)²`:
+
 ```lean
--- Surface code: n = d² + (d−1)².
-example : (surface 2).n = 5 := by decide
-example : (surface 3).n = 13 := by decide
-example : (surface 2).valid = true := by decide
-example : (surface 3).valid = true := by decide
-example : hasShape (surface 3).hx 6 13 = true := by decide   -- 6 X-checks on 13 qubits
-example : hasShape (surface 3).hz 6 13 = true := by decide
+surface 2     -- a [[5, …]] CSSCode:  n = 5,   valid = true
+surface 3     -- a [[13, …]] CSSCode: n = 13,  valid = true
+              --   hx : 6 X-checks on 13 qubits   (hasShape … 6 13)
+              --   hz : 6 Z-checks on 13 qubits   (hasShape … 6 13)
+              --   CSS condition Hx * Hzᵀ = 0 holds
 ```
 
-These `by decide` checks (from [Basic.lean](Basic.lean)) confirm that `surface 3` materializes to a `[[13, …]]` code with the expected `6 × 13` X- and Z-check matrices and a satisfied CSS condition (`Hx * Hzᵀ = 0`).
+The checked variant `surface? d` returns the same value wrapped in `Option`,
+rejecting the degenerate `d < 2` (from [Basic.lean](Basic.lean)):
+
+```lean
+surface? 3    -- OK:       some (surface 3)   (isSome = true)
+surface? 1    -- rejected: none               (d < 2)
+```
+
+`surface 3` materializes to a `[[13, …]]` code with the expected `6 × 13` X- and Z-check
+matrices and a satisfied CSS condition (`Hx * Hzᵀ = 0`).
 
 ## Status & scope
 

@@ -63,12 +63,18 @@ def rotS (q : LQubit) : Rot := ⟨⟨false, .piQuarter⟩, [(q, .Z)]⟩
 /-- A two-qubit logical `π/8` rotation about `Z⊗Z` over the set `{q₁, q₂}`. -/
 def rotZZ (q₁ q₂ : LQubit) : Rot := ⟨⟨false, .piEighth⟩, [(q₁, .Z), (q₂, .Z)]⟩
 
--- The π/8 rotations are exactly the T-count: two of the three below.
-example : RotProg.tCount [rotT ⟨0, 0⟩, rotS ⟨0, 0⟩, rotZZ ⟨0, 0⟩ ⟨0, 1⟩] = 2 := by decide
-example : RotProg.wf [rotT ⟨0, 0⟩, rotS ⟨0, 0⟩, rotZZ ⟨0, 0⟩ ⟨0, 1⟩] = true := by decide
+-- A 3-rotation PPR program over logical block 0 (LQubit ⟨blk, idx⟩):
+--   exp(i·+π/8 · Z₀)         -- T   on q0   (π/8 ⇒ T-type)
+--   exp(i·+π/4 · Z₀)         -- S   on q0   (π/4 ⇒ Clifford)
+--   exp(i·+π/8 · Z₀⊗Z₁)      -- ZZ  on {q0,q1} (π/8 ⇒ T-type)
+[ rotT ⟨0, 0⟩            -- ⟨⟨false, .piEighth⟩,  [(⟨0,0⟩, .Z)]⟩
+, rotS ⟨0, 0⟩            -- ⟨⟨false, .piQuarter⟩, [(⟨0,0⟩, .Z)]⟩
+, rotZZ ⟨0, 0⟩ ⟨0, 1⟩ ] -- ⟨⟨false, .piEighth⟩,  [(⟨0,0⟩, .Z), (⟨0,1⟩, .Z)]⟩
+-- tCount = 2   -- the two π/8 rotations (T and ZZ); the π/4 S does not count
+-- OK: wf = true   -- every axis names each logical qubit at most once
 ```
 
-Logical T/S/`ZZ` gates built as concrete `Rot` values, with `by decide` checks that the T-count counts exactly the `π/8` rotations and the program is well-formed (each axis names a logical qubit at most once). Source: [Syntax.lean](Syntax.lean) (lines 104–117).
+Logical T/S/`ZZ` gates built as concrete `Rot` values; the program above is the literal `RotProg` whose T-count is exactly the two `π/8` rotations and which is well-formed (each axis names a logical qubit at most once). Source: [Syntax.lean](Syntax.lean) (lines 104–117).
 
 ## Status & scope
 

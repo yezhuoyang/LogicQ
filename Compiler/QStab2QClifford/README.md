@@ -64,17 +64,42 @@ theorem compile?_trace_evalVar {cfg : CompileConfig} {p : QStab.Prog} {c : Circu
 
 ## Example
 
-The standard-Z gadget circuit is byte-identical to the pre-M23 pass: a fresh `|0⟩` ancilla (qubit 3), data qubits 1 and 0 control CNOTs into it, then one measurement into result bit 7:
+The input is a QStab `Prog` — physical Pauli measurements and classical parities in SSA form. The README readout program ([QStab/Syntax.lean:80](../../QStab/Syntax.lean#L80)) is a distance-3 repetition-style syndrome + logical readout:
 
 ```lean
--- The standard-Z gadget circuit is byte-identical to the pre-M23 pass:
-example : compileProp (stdZ 3 [1, 0]) 7 0 =
-    [.prepZero 3, .CNOT 1 3, .CNOT 0 3, .meas 3 7] := by decide
+-- QStab source program (the input to this pass):
+[ .prop (some ⟨0, 0⟩) (ofString "ZZI"),   -- c0
+  .prop (some ⟨0, 1⟩) (ofString "IZZ"),   -- c1
+  .prop (some ⟨1, 0⟩) (ofString "ZZI"),   -- c2
+  .parity [0, 2],                          -- d0 = c0 ⊕ c2
+  .prop (some ⟨1, 1⟩) (ofString "IZZ"),   -- c3
+  .parity [1, 4],                          -- d1 = c1 ⊕ c3
+  .prop none (ofString "ZZZ"),             -- c4
+  .parity [6] ]                            -- o0 = c4
 ```
 
-This `by decide` test is checked by the kernel (a `D`-tier fact in the contract's terms). Source: [Basic.lean](Basic.lean) (§1).
+The extraction schedule is itself pure data — one `ExtractionSpec` per prop. The standard-Z spec `stdZ 3 [1, 0]` (ancilla qubit 3, data qubits 1 then 0) lowers a single prop to the gadget circuit value below — a fresh `|0⟩` ancilla (qubit 3), data qubits 1 and 0 control CNOTs into it, then one measurement into result bit 7. The emitted `QClifford.Circuit` is byte-identical to the pre-M23 pass ([Basic.lean:60](Basic.lean#L60)):
 
-The same file exercises the source-semantics bridge end to end: on a Knill `ZZ` prop followed by a `Parity`, the compiled store agrees with `QStab.evalVar` under the extraction-induced outcome stream (`example ... := compile?_trace_evalVar h outcome w hw`, [Basic.lean](Basic.lean) §6).
+```lean
+-- Spec for one prop:           stdZ 3 [1, 0]  =  ExtractionSpec.standardZ [1, 0] 3
+-- Emitted QClifford.Circuit (the gadget value) for that prop into result bit 7:
+[ .prepZero 3,    -- fresh |0⟩ ancilla
+  .CNOT 1 3,      -- data qubit 1 → ancilla
+  .CNOT 0 3,      -- data qubit 0 → ancilla
+  .meas 3 7 ]     -- measure ancilla into result bit 7
+```
+
+The full program `progReadout` extracted under `repetitionReadoutCfg` (every prop a `stdZ 3 …`) gives a circuit with `measCount = 5` (one per prop) and `parityCount = 3` (`d0`, `d1`, `o0`) ([Basic.lean:56](Basic.lean#L56)). Source: [Basic.lean](Basic.lean) (§1).
+
+The same file exercises the source-semantics bridge end to end. The bridge program is a Knill `ZZ` prop followed by a `Parity` ([Basic.lean:188](Basic.lean#L188)):
+
+```lean
+-- The source-bridge program (bridgeProg) — extracted with knillZ [0,1] [2,3]:
+[ .prop none (ofString "ZZ"),   -- the Knill ZZ prop (var 0)
+  .parity [0] ]                  -- a parity of it (var 1)
+```
+
+On every source variable, under the extraction-induced outcome stream (each prop's syndrome = the XOR of its physical measurements), the compiled store equals `QStab.evalVar bridgeProg …` — this is exactly the `compile?_trace_evalVar` bridge theorem instantiated at `bridgeProg` ([Basic.lean](Basic.lean) §6).
 
 ## Status & scope
 

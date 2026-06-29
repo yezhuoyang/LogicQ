@@ -40,13 +40,15 @@ theorem mkLogicalBasis_sound {cc : CheckedCSSCode} {clb : CheckedLogicalBasis}
 
 ## Example
 
+The `CSSCode` value fed to `mkCSS` (the program/value in ChainQ syntax):
+
 ```lean
--- rejects, with the RIGHT reason:
-example : (match mkCSS { n := 2, hx := [[true, false]], hz := [[true, false]] } with
-           | .error (.invalidCSS _) => true | _ => false) = true := by decide
+{ n := 2, hx := [[true, false]], hz := [[true, false]] }
+-- rejected: .invalidCSS "Hx·Hzᵀ ≠ 0 (X- and Z-checks anticommute)"
+--   X-check [1,0] and Z-check [1,0] overlap on qubit 0 ⇒ they anticommute
 ```
 
-`mkCSS` rejects a code whose X- and Z-checks anticommute (`Hx·Hzᵀ ≠ 0`) and reports it as an `.invalidCSS` error, verified by `decide`. Source: [Basic.lean](Basic.lean).
+`mkCSS` rejects a code whose X- and Z-checks anticommute (`Hx·Hzᵀ ≠ 0`) and reports it as an `.invalidCSS` error. Source: [Basic.lean](Basic.lean).
 
 ## Status & scope
 

@@ -33,15 +33,30 @@ In `symplecticStabilizers`, each X-check row `r` (width `n`) is laid out as `r +
 
 ## Example
 
+The surface-2 code (`n = 5`) materializes to these concrete GF(2) matrices — honest
+`BoolMat` values, not placeholders (`true`/`false` shown as `T`/`F` for width):
+
 ```lean
-example : (surface 2).symplecticStabilizers =
-  [[true, false, true, false, true, false, false, false, false, false],
-   [false, true, false, true, true, false, false, false, false, false],
-   [false, false, false, false, false, true, true, false, false, true],
-   [false, false, false, false, false, false, false, true, true, true]] := by decide
+-- (surface 2).xChecks : the X-check matrix hx — 2 rows × width n = 5
+[[T, F, T, F, T],
+ [F, T, F, T, T]]
+
+-- (surface 2).zChecks : the Z-check matrix hz — 2 rows × width n = 5
+[[T, T, F, F, T],
+ [F, F, T, T, T]]
+
+-- (surface 2).symplecticStabilizers : the width-2n = 10 stabilizer matrix
+-- each X-check row r ↦ r ++ 0⁵ (X-rows first), each Z-check row r ↦ 0⁵ ++ r
+[[T, F, T, F, T,  F, F, F, F, F],   -- X-check 0
+ [F, T, F, T, T,  F, F, F, F, F],   -- X-check 1
+ [F, F, F, F, F,  T, T, F, F, T],   -- Z-check 0
+ [F, F, F, F, F,  F, F, T, T, T]]   -- Z-check 1
 ```
 
-The surface-2 code materializes to a concrete 4-row, width-`2n = 10` symplectic stabilizer matrix — verified by `decide`, demonstrating that the family constructor produces an honest GF(2) value rather than a placeholder. Source: [Tests.lean](Tests.lean) §3.
+The symplectic matrix is a concrete 4-row, width-`2n = 10` value (`hx.length + hz.length =
+2 + 2` rows), demonstrating that the family constructor produces an honest GF(2) value rather
+than a placeholder. Source: [Tests.lean](Tests.lean) §1 (`xChecks`/`zChecks`) and §3 (the
+symplectic matrix).
 
 ## Status & scope
 

@@ -66,13 +66,22 @@ def compileChainQToMixIR? (ws : List CapabilityWitness) (cfg : StrategyConfig) .
 
 ## Example
 
+Each value below is a real `MixPrim` checked against `cnotEnv` — the two-block bare
+1-logical environment `twoBlockEnv 1` ([Primitive.lean:412](Primitive.lean#L412),
+[Primitive.lean:417](Primitive.lean#L417)). `cnotSpec` / `batchSpec` are the fixtures from
+[Primitive.lean:418](Primitive.lean#L418):
+
 ```lean
-example : ok? (checkPrim? [] cnotEnv PPMState.init (.transversalCNOT cnotSpec)) = true := by decide
-example : ok? (checkPrim? [] cnotEnv PPMState.init (.transversalBatch batchSpec)) = true := by decide
--- THE VERIFIED homomorphic-CNOT path rejects a ZERO physical incidence that requests a
--- logical CNOT (checkTransversalCNOTBatch: the zero map induces identity, not the CNOT):
-example : ok? (checkPrim? [] cnotEnv PPMState.init
-    (.transversalBatch { controlBlock := 0, targetBlock := 1, incidence := [[false]], logicalIncidence := [[true]] })) = false := by decide
+-- OK: a single-instruction transversal CNOT, control block-0 qubit-0 → target block-1 qubit-0,
+--     with a 1×1 physical incidence map that lifts to the requested logical CNOT.
+.transversalCNOT { control := ⟨0, 0⟩, target := ⟨1, 0⟩, incidence := [[true]] }
+
+-- OK: the batched (high-rate) form — physical incidence agrees with the logical incidence.
+.transversalBatch { controlBlock := 0, targetBlock := 1, incidence := [[true]], logicalIncidence := [[true]] }
+
+-- rejected: a ZERO physical incidence that requests a logical CNOT.
+--   checkTransversalCNOTBatch proves the zero map induces identity, not the requested CNOT.
+.transversalBatch { controlBlock := 0, targetBlock := 1, incidence := [[false]], logicalIncidence := [[true]] }
 ```
 A checked transversal CNOT type-checks, while a degenerate (zero-incidence) physical map
 that *requests* a logical CNOT is rejected, because the checker proves the lifted map does

@@ -10,7 +10,7 @@ This layer sits between the TypeChecker legality kernels and the Mixed IR. It pa
 | --- | --- |
 | [Basic.lean](Basic.lean) | Certificate skeleton: `PhysMap`, `ChainMapCert`, `ChainMapSquare`, `LogicalInjectionCert`, `HomomorphicCNOTCert`, `SwitchProtocolCert`; structural + recomputed (`verifiedCheck`) checks. |
 | [DimensionJump.lean](DimensionJump.lean) | Proof-carrying transversal dimension jump: commuting chain square + transversal, non-degenerate `γ₁` + injective induced map; `checkDimensionJump?` + soundness. |
-| [ProductSurgery.lean](ProductSurgery.lean) | Product-surgery / QGPU merged CSS code, recomputed CSS-commutation + merge count; `CapabilityWitness` provenance so `.productSurgery` flows only from a `CheckedProductSurgery`. |
+| [ProductSurgery.lean](ProductSurgery.lean) | Product-surgery / QGPU merged CSS code, recomputed CSS-commutation + merge count; `CapabilityWitness` provenance so `.productSurgery` flows only from a `CheckedProductSurgery`; **`CheckedProductSurgeryFor Γ blockId`** binds the cert's `hX/hZ` to the addressed block's CSS extraction (`extractHX`/`extractHZ` over the symplectic `Block.stab`) + `toWitness` authorization. |
 | [QGPUAddr.lean](QGPUAddr.lean) | QGPU clustered logical basis + merge-alignment/round legality BOUND to a `TypedEnv`; ChainQ-name re-resolution (`checkQGPURoundIn?`). |
 | [BatchedSwitch.lean](BatchedSwitch.lean) | Batched code switching as a `(block,logical) ↦ (logical,block)` transpose route over `LQubit`; env-bound `checkBatchedCodeSwitchFor?` + routing-preservation theorem. |
 | [GPPMSemantics.lean](GPPMSemantics.lean) | Generalized PPM: recomputes merged-CSS + target-measured + type-checked byproduct frame; explicitly NOT a `CheckedPrimitive`. |
@@ -62,34 +62,58 @@ theorem checkProductSurgery?_sound (c : ProductSurgeryCert) (maxMerge : Nat)
 
 ```lean
 theorem not_all_lower_to_mixIR :
-    qldpcRegistry.all (fun s => s.status == .lowersToMixIR) = false := by decide
+    qldpcRegistry.all (fun s => s.status == .lowersToMixIR) = false
 ```
 
 ## Example
+
+A `BatchedCodeSwitchSpec` IS the route data. The canonical 2×2 batched switch
+([BatchedSwitch.lean:101](BatchedSwitch.lean#L101)):
 
 ```lean
 -- a 2×2 batched switch: k1 = k2 = 2; sources = {⟨0,0⟩,⟨0,1⟩,⟨1,0⟩,⟨1,1⟩}.
 def bcs22 : BatchedCodeSwitchSpec :=
   { k1 := 2, k2 := 2, sources := [⟨0, 0⟩, ⟨0, 1⟩, ⟨1, 0⟩, ⟨1, 1⟩], dummies := [] }
-example : bcs22.wf = true := by decide
-example : ok? (checkBatchedCodeSwitch? bcs22) = true := by decide
-
--- the carrier lookup changes EXACTLY as (j,i) ↦ (i,j):
-example : bcs22.routeMap.loc ⟨0, 1⟩ = ⟨1, 0⟩ := by decide      -- block 0, logical 1 ↦ block 1, logical 0
-example : bcs22.routeMap.loc ⟨1, 0⟩ = ⟨0, 1⟩ := by decide      -- block 1, logical 0 ↦ block 0, logical 1
-example : bcs22.routeMap.loc ⟨1, 1⟩ = ⟨1, 1⟩ := by decide      -- diagonal fixed
+-- OK: 4 = k1·k2 active logicals, all in range (blk < 2, idx < 2), route is collision-free.
 ```
 
-A well-formed batched code switch routes the `(block j, logical i)` address to its transpose `(block i, logical j)`, and the route's `LocMap` lookup is checked by `decide`. Source: [BatchedSwitch.lean](BatchedSwitch.lean) (§BCS.4 tests).
+Its `routeMap` is the literal `(block j, logical i) ↦ (block i, logical j)` transpose —
+the carrier-name lookup as DATA (`LQubit` written `⟨blk, idx⟩`):
+
+```lean
+-- bcs22.routeMap : LocMap = the active sources paired with their transposed targets:
+[ (⟨0,0⟩, ⟨0,0⟩)      -- diagonal fixed
+, (⟨0,1⟩, ⟨1,0⟩)      -- block 0, logical 1 ↦ block 1, logical 0
+, (⟨1,0⟩, ⟨0,1⟩)      -- block 1, logical 0 ↦ block 0, logical 1
+, (⟨1,1⟩, ⟨1,1⟩) ]    -- diagonal fixed
+```
+
+Other spec values, accepted or rejected by the routing well-formedness discipline
+(`BatchedCodeSwitchSpec.wf`, [BatchedSwitch.lean:64](BatchedSwitch.lean#L64); negatives from
+§BCS.4):
+
+```lean
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩, ⟨0,1⟩, ⟨1,0⟩, ⟨1,1⟩], dummies := [] }   -- OK: the bcs22 route above
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩, ⟨0,1⟩, ⟨1,0⟩, ⟨1,1⟩], dummies := [2,3] } -- OK: dummies out of source-block range, distinct
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩],                       dummies := [] }   -- rejected: 1 ≠ k1·k2 active logicals
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩, ⟨0,1⟩, ⟨1,0⟩, ⟨5,1⟩],  dummies := [] }   -- rejected: source block index 5 ≥ k2
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩, ⟨0,1⟩, ⟨1,0⟩, ⟨1,1⟩], dummies := [2,2] } -- rejected: duplicate dummy ids
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩, ⟨0,1⟩, ⟨1,0⟩, ⟨1,1⟩], dummies := [0] }   -- rejected: dummy collides with active source block (0 < k2)
+{ k1 := 2, k2 := 2, sources := [⟨0,0⟩, ⟨0,0⟩, ⟨1,0⟩, ⟨1,1⟩], dummies := [] }   -- rejected: ⟨0,0⟩ twice → route collision (Nodup fails)
+```
+
+A well-formed batched code switch routes the `(block j, logical i)` address to its transpose
+`(block i, logical j)`. Source: [BatchedSwitch.lean](BatchedSwitch.lean) (§BCS.4 tests).
 
 ## Status & scope
 
 Honest, mirroring the repo's contract tiers (P proved theorem, D `by decide` test, A documented assumption, M missing/planned):
 
-- **Recomputed over GF(2) (P/D).** Chain-square commutation (`∂φ = φ∂`), physical transversality + non-degeneracy of `γ₁`, induced-logical-map injectivity (rank), disjoint-image parallelism, merged-code CSS-commutation, data-stabilizer preservation, merge count `M = rank H_Z'`, batched-route well-formedness/transpose, QGPU basis/alignment/round legality. These carry `by decide` tests and `*_sound` theorems (e.g. `checkDimensionJump?_sound`, `checkProductSurgery?_sound`, `checkQGPURoundIn?_sound`, `checkBatchedCodeSwitchFor?_preservesRoute`). Soundness theorems are the usual `propext`-clean style, NOT "axiom-free".
-- **Provenance (P).** `CapabilityWitness` closes the `.productSurgery` bypass: a `.productSurgery` authorization can only come from a `CheckedProductSurgery` (`generic_not_productSurgery`, `genericWitness?`).
+- **Recomputed over GF(2) (P/D).** Chain-square commutation (`∂φ = φ∂`), physical transversality + non-degeneracy of `γ₁`, switch/square map coherence (`switch.chain.map = square.highMap`), induced-logical-map injectivity (rank), disjoint-image parallelism (COMPUTED from `physMapImageRows`, not caller-supplied), merged-code CSS-commutation, data-stabilizer preservation, merge count `M = rank H_Z'`, batched-route well-formedness/transpose, QGPU basis/alignment/round legality, AND the **CSS extraction binding** of a product-surgery cert to an addressed block (`CheckedProductSurgeryFor`). These carry `by decide` tests and `*_sound` theorems (e.g. `checkDimensionJump?_sound`, `checkProductSurgery?_sound`, `checkProductSurgeryFor?_sound`, `checkQGPURoundIn?_sound`, `checkBatchedCodeSwitchFor?_preservesRoute`). Soundness theorems are the usual `propext`-clean style, NOT "axiom-free".
+- **Provenance (P).** `CapabilityWitness` closes the `.productSurgery` bypass: a `.productSurgery` authorization can only come from a `CheckedProductSurgery` (`generic_not_productSurgery`, `genericWitness?`).  A `CheckedProductSurgeryFor` additionally binds that cert to the addressed `TypedEnv` block (cert `hX/hZ` = the block's CSS extraction) and AUTHORIZES the witnessed PPM via `toWitness` (`checkProductSurgeryFor?_sound`, `toWitness_kind`).
+- **Block-identity binding (P, NEW).** `CheckedProductSurgeryFor Γ blockId` resolves `blockId` in `Γ`, requires the block CSS (`blockStabIsCSS`), and proves the cert's data code `(hX, hZ)` IS the CSS extraction (`extractHX`/`extractHZ`, convention pinned to `Symplectic`: `take n` = X-half, `drop n` = Z-half) of the block's symplectic `Block.stab`.  Tests: matching cert accepted; different `hX/hZ`, SWAPPED X/Z (still a valid CSS code, but rejected by the binding), wrong block id, and non-CSS/mixed-row blocks all rejected.
 - **Deferred / external / assumed (A/M).** Merged-/jumped-code DISTANCE, decoder thresholds, circuit-level fault distance, one-bit-teleportation init/measurement/feedback, the homology-quotient refinement of injectivity, the operational measurement-outcome rule (no `Step` semantics), and ancilla state preparation are all EXPLICIT deferred obligations (recorded as `obligations : List String`). A `GPPMArtifact` is deliberately NOT a `CheckedPrimitive`.
-- **MixIR status (P).** Only high-weight capability PPM lowers to MixIR; the other six methods are `externalOnly` (`not_all_lower_to_mixIR`, `only_ppm_lowers`). The `Block`-identity binding for product surgery (`CheckedProductSurgeryFor`) is a recorded BLOCKER, NOT built.
+- **MixIR status (P).** Only high-weight capability PPM lowers to MixIR; the other six methods are `externalOnly` (`not_all_lower_to_mixIR`, `only_ppm_lowers`).  Product surgery is now `Block`-identity-bound (`CheckedProductSurgeryFor`, `productSurgery_blockBound_anchor`) and AUTHORIZES the witnessed PPM, but does not itself lower to a `MixPrim`; QGPU/GPPM/dimension-jump/batched-switch remain first-class protocol nodes (QGPU/dimjump/BCS *could* lower to `parallelPPM`/`codeSwitch`+cert once source syntax + elaboration is wired — NOT done; GPPM CANNOT lower, its outcome=±1 eigenvalue rule has no `Step` semantics).
 - The `QLDPCPapers/` concrete instances use `native_decide` (out of the M23 axiom-clean scope).
 
 ## See also

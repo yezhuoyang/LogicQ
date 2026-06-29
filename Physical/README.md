@@ -39,16 +39,16 @@ Note that `ofChar`/`ofString` are *total*: missing or unrecognized characters pa
 ## Example
 
 ```lean
-example : ofString "ZZI" = [.Z, .Z, .I] := by decide
-example : ofString "ZZZ" = [.Z, .Z, .Z] := by decide
+"ZZI"   ↦   [.Z, .Z, .I]    -- OK: trailing identity is kept (dense)
+"ZZZ"   ↦   [.Z, .Z, .Z]    -- OK: a weight-3 Z string
 ```
 
-These two `by decide` checks pin down the dense-string parser: `"ZZI"` becomes `[Z, Z, I]` (note the trailing identity is kept). Source: [Basic.lean](Basic.lean).
+These two values pin down the dense-string parser: `"ZZI"` becomes `[Z, Z, I]` (note the trailing identity is kept). Source: [Basic.lean](Basic.lean).
 
 ## Status & scope
 
 - This folder is **pure vocabulary** — it defines names and a total parser, nothing more.
-- The two `example ... := by decide` parser checks are tier **D** (`by decide` tests) in the [CONTRACT](../Compiler/CONTRACT.md) sense: they confirm the concrete parse behavior, not any operational property.
+- The two parser values above are tier **D** (`by decide` tests in [Basic.lean](Basic.lean)) in the [CONTRACT](../Compiler/CONTRACT.md) sense: they confirm the concrete parse behavior, not any operational property.
 - There is **no semantics here**: stabilizer/Clifford evolution, channel correctness, distance, decoders, and fault-tolerance claims all live downstream and are out of scope for this module (and many of those are themselves explicitly deferred). This module asserts none of them.
 - No `axiom`s, no `sorry`, no deferred obligations are introduced by this file.
 

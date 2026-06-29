@@ -55,14 +55,16 @@ def envOf : Except ChainQError CheckedCSSCode → TypedEnv
 
 ## Example
 
+The §1 source program — `H ; S` on the single logical qubit of block `0`
+([Contract.lean:25](Contract.lean#L25)), run on a one-block bare env
+`tenvQ = ⟨[⟨q0, _⟩]⟩`:
+
 ```lean
 def hsSrc : List LogicalOp := [.hGate ⟨0, 0⟩, .sGate ⟨0, 0⟩]
-
-example : (match compile? .executable demoCfg tenvQ hsSrc with
-           | .ok c => decide (execMixed (Layout.flat 4) 1 c.prog (init 1)
-                              = some (runGates 1 (sourceGates (Layout.flat 4) hsSrc) (init 1)))
-           | .error _ => false) = true := by decide
-example : hsSrc.all (fun op => opBoundary op == GadgetBoundary.exact) = true := by decide
+-- per-op correctness boundary (from `opBoundary`, Mixed/Semantics.lean):
+--   .hGate ⟨0,0⟩  →  GadgetBoundary.exact
+--   .sGate ⟨0,0⟩  →  GadgetBoundary.exact
+-- OK: both ops sit at the .exact boundary, so the whole fragment is exact-operational.
 ```
 
 `H ; S` lowers to direct transversals; running the EMITTED program through the operational

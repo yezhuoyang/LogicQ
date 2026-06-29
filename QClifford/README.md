@@ -66,13 +66,15 @@ theorem run_append {St : Type} (Ho : Host St) (c₁ c₂ : Circuit) (st : St) (�
 /-- A `CNOT(c,t)` realized from a `CZ`: `H t; CZ c t; H t`. -/
 def cnotFromCZ (c t : PQubit) : Circuit := [.H t, .CZ c t, .H t]
 
-example : (cnotFromCZ 0 1).gateCount = 3 := by decide
-example : (cnotFromCZ 0 1).twoQubitCount = 1 := by decide
-example : (cnotFromCZ 0 1).width = 2 := by decide
+-- cnotFromCZ 0 1 is the concrete circuit (a value of type `Circuit = List Gate`):
+[ .H 1, .CZ 0 1, .H 1 ]      -- a CNOT(0,1) decomposed into a CZ conjugated by Hadamards
+-- gateCount      = 3   (three gates)
+-- twoQubitCount  = 1   (exactly the .CZ)
+-- width          = 2   (qubits 0 and 1 touched)
 ```
 
-A `CNOT` decomposed into a `CZ` conjugated by Hadamards, with the resource counters
-checked by `decide`: 3 gates, exactly 1 two-qubit gate, width 2.
+A `CNOT` decomposed into a `CZ` conjugated by Hadamards. The concrete circuit value carries
+the resource readouts directly: 3 gates, exactly 1 two-qubit gate, width 2.
 Source: [Syntax.lean](Syntax.lean) (lines 90–95).
 
 ## Status & scope

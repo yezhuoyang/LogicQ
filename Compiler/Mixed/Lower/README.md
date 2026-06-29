@@ -58,17 +58,51 @@ theorem AncillaPool.alloc_valid (Γ : TypedEnv) (R : PPMState) (basis : AncBasis
 
 ## Example
 
+The input to this layer is a straight-line `LogicalOp` source program (`List LogicalOp`)
+type-checked against a `TypedEnv`.  The fixture is the single-logical (`k=1`) block
+`tenvQ` ([TypeChecker/Judgment/PPM/Examples.lean:17,26](../../../TypeChecker/Judgment/PPM/Examples.lean#L17)):
+
 ```lean
--- magic policy is the MODE: `executable` rejects `T`, `moduloMagic` accepts it (typed obligation).
-example : ok? (compile? .executable  { caps := [], anc := ⟨0, 0⟩ } tenvQ [.tGate ⟨0, 0⟩]) = false := by decide
-example : ok? (compile? .moduloMagic { caps := [], anc := ⟨0, 0⟩ } tenvQ [.tGate ⟨0, 0⟩]) = true := by decide
--- both modes reject an INVALID `T` operand (source typecheck fires before the magic policy):
-example : ok? (compile? .moduloMagic { caps := [], anc := ⟨0, 0⟩ } tenvQ [.tGate ⟨0, 99⟩]) = false := by decide
--- a valid H/S program compiles in executable mode:
-example : ok? (compile? .executable { caps := [], anc := ⟨0, 0⟩ } tenvQ [.hGate ⟨0, 0⟩, .sGate ⟨0, 0⟩]) = true := by decide
+def q0 : Block := { n := 1, stab := [], lx := [[true, false]], lz := [[false, true]] }
+def tenvQ : TypedEnv := ⟨[⟨q0, by decide⟩]⟩   -- one bare logical qubit: X̄ = X, Z̄ = Z
 ```
 
-These `by decide` tests (from [Examples.lean](Examples.lean)) exercise `compile?`: the mode is the magic policy (`executable` rejects `T`, `moduloMagic` keeps the typed `.magic` obligation), a bad operand is rejected by the source typecheck before any lowering, and a direct H/S program compiles.
+These are the source programs `compile?` is run on (from [Examples.lean](Examples.lean)), with the
+mode (the magic policy) shown beside each.  `executable` rejects `T`; `moduloMagic` keeps it as a
+typed `.magic` obligation; an invalid operand is rejected by the source typecheck before any mode policy:
+
+```lean
+[.tGate ⟨0, 0⟩]                  -- under .executable:  rejected: T has no Step semantics (magic policy)
+[.tGate ⟨0, 0⟩]                  -- under .moduloMagic: OK (lowers to a typed deferred .magic obligation)
+[.tGate ⟨0, 99⟩]                 -- under .moduloMagic: rejected: invalid operand (logical index 99 ∉ tenvQ)
+[.hGate ⟨0, 0⟩, .sGate ⟨0, 0⟩]   -- under .executable:  OK (direct transversal H then S)
+```
+
+More source programs over `tenvQ`, accepted/rejected the same way (from [Examples.lean](Examples.lean),
+[ProgramOk.lean](ProgramOk.lean)):
+
+```lean
+[.hGate ⟨0, 99⟩]                                 -- rejected: invalid operand (index 99 ∉ tenvQ), both modes
+[.sGate ⟨0, 99⟩]                                 -- rejected: invalid operand, .executable
+[.cnotGate ⟨0, 0⟩ ⟨0, 0⟩]                        -- rejected: CNOT control = target
+[.measure 0 [(⟨0, 0⟩, PPM.PLetter.Z)], .hGate ⟨0, 0⟩]  -- OK: measure Z̄ on q0 (binds CVar 0), then H
+```
+
+The accept/reject decisions ride on the source-program typing judgment `ProgramOk`
+([ProgramOk.lean:54](ProgramOk.lean#L54)), whose `T`/magic policy is the `Resources.allowMagic` flag:
+
+```lean
+[.tGate ⟨0, 0⟩]   -- under Resources ⟨⟨0,0⟩, allowMagic := true⟩:  OK
+[.tGate ⟨0, 0⟩]   -- under Resources ⟨⟨0,0⟩, allowMagic := false⟩: rejected: magic not admitted
+```
+
+A `T`-containing program is NOT executable-shaped: it type-checks only modulo magic, lowering to a
+deferred obligation rather than a `Step`-semantic instruction:
+
+```lean
+[.magic { kind := .tGate, target := ⟨0, 0⟩ }]   -- type-checks (modulo magic); progNoMagic = false
+[.transversal 0 hGate2x2]                        -- progNoMagic = true (executable-shaped)
+```
 
 ## Status & scope
 
