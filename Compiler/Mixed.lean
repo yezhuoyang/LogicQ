@@ -20,3 +20,4 @@
 -/
 import Compiler.Mixed.Syntax
 import Compiler.Mixed.Check
+import Compiler.Mixed.Parse

@@ -83,7 +83,7 @@ inductive LogicalOp
   | xGate          (q : LQubit)
   | zGate          (q : LQubit)
   | czGate         (control target : LQubit)
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-- Single-qubit symplectic gates (`2×2`, `(x,z)` layout). -/
 def hGate2x2 : BoolMat := [[false, true], [true, false]]   -- H : X ↔ Z

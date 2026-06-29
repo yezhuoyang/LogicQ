@@ -13,6 +13,7 @@ This is **Stage 4** of the LogicQ stack and the IR the front-end actually lowers
 | [Check.lean](Check.lean) | The mixed-IR checker `checkInstr` / `checkLogicalExec` (threads `TypedEnv` + `PPMState`), plus the `private` legacy M9 cost-driven selector |
 | [Semantics.lean](Semantics.lean) | The one shared evidence-carrying operational semantics: `MixedInterp`, `ExecState`, `Step` / `Steps`, per-instruction realization + progress lemmas, the `GadgetBoundary` tagging |
 | [Lower.lean](Lower.lean) | Aggregator that imports the `Mixed/Lower/` resource-aware compilation relation + public `compile?` (see [Lower/](Lower/README.md)) |
+| [Parse.lean](Parse.lean) | Keyword-led text parsers: `parseLogical` (the `Logical`-prefixed source language) and `parseMixed` (the kind-keyword Mixed IR), reusing the shared lexers + the PPM target parser; `by decide` round-trip tests |
 
 ## Key definitions
 
@@ -53,6 +54,38 @@ theorem Step_implies_checkInstr (I : MixedInterp Q) (caps : List Capability)
 theorem no_step_magic (I : MixedInterp Q) (caps : List Capability) (ob : MagicObligation)
     (s : ExecState Q) : ¬ ∃ s', Step I caps (.magic ob) s s'
 ```
+
+## Surface syntax — keyword-led, parses today
+
+The two languages of this stage each have a real text parser ([Parse.lean](Parse.lean), tests by
+`decide`). **The keywords ARE the constructors:** every **logical** instruction carries the
+**`Logical`** keyword, and every **Mixed IR** instruction **leads with its kind keyword** (the
+`MixedInstr` discriminator above).
+
+![ppm](https://img.shields.io/badge/ppm-1f6feb) ![transversal](https://img.shields.io/badge/transversal-2ea44f) ![transversalCNOT](https://img.shields.io/badge/transversalCNOT-3fb950) ![transversalCNOTBatch](https://img.shields.io/badge/transversalCNOTBatch-238636) ![automorphism](https://img.shields.io/badge/automorphism-8957e5) ![switch](https://img.shields.io/badge/switch-d29922) ![magic](https://img.shields.io/badge/magic-da3633) ![pauli](https://img.shields.io/badge/pauli-009688)
+
+```rust
+// LogicalOp source — the `Logical` keyword is REQUIRED (parseLogical; a bare gate is rejected):
+Logical H q[0]
+Logical CNOT q[0] q[1]
+Logical T q[0]
+Logical measure q[0]↦Z -> c0
+
+// MixedInstr — the KIND keyword leads (parseMixed):
+transversal 0 H                  // MixedInstr.transversal 0 hGate2x2
+transversalCNOT q[0] q[1] [[1]]  // MixedInstr.transversalCNOT {control, target, incidence}
+pauli X q[0]                     // MixedInstr.pauli ⟨0,0⟩ .X
+magic T q[0]                     // MixedInstr.magic {kind := .tGate, target := ⟨0,0⟩}
+ppm c0 := M q[0]↦Z               // MixedInstr.ppm (.meas 0 [(⟨0,0⟩, .Z)])
+// the remaining three are keyword-led; their matrix / Block / cert payload stays machine-form:
+automorphism 0 [[ ..2n×2n.. ]]                          // MixedInstr.automorphism 0 M
+switch 0 repCode3 { kind := .gaugeFix, f := encF }      // MixedInstr.switch 0 D cert
+transversalCNOTBatch 0 1 [[1]] [[1]]                    // MixedInstr.transversalCNOTBatch {controlBlock,…}
+```
+
+All eight `MixedInstr` keywords appear above; `automorphism` / `switch` / `transversalCNOTBatch` carry
+a full `BoolMat` / `Block` / `SwitchCert` payload, so text parsing for them is the next increment (the
+other five round-trip by `decide` today).
 
 ## Example
 

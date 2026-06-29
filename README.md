@@ -129,6 +129,19 @@ injection is wired into the physical path.
 | `cat_n65` | Steane x65 | 130 | 130 | 130 | 390 | 520 | 910 | 3575 | 910 |
 | `ghz_n78` | Steane x78 | 156 | 156 | 156 | 468 | 624 | 1092 | 4290 | 1092 |
 
+Additional encoded family sweeps are checked in the same file. These are not hand-counted
+tables; each row is a `#guard` that runs the actual QASM/LogicQ/MixedIR/QStab/QClifford
+pipeline:
+
+| Family | Checked encoded setup | Positive path | Checked blockers |
+|---|---|---|---|
+| raw CSS | `xCheck2`, Steane `[[7,1,3]]` | readout and QASMBench no-magic subset | T/magic QASMBench cases |
+| surface | distances `d = 2,3,4,5` | readout, one CX, 3-CX chain | invalid `d = 0,1`; H remains unsupported |
+| toric | distances `d = 2,3,4,5` | two-logical readout | invalid `d = 0,1`; naive identity-incidence CX |
+| HGP | open-grid `(2,2)`, `(3,2)`, `(3,3)`, `(4,3)` | encoded readout | malformed declarations via ChainQ checks |
+| lifted product | `ell = 2,3,4,5` for the line-protograph fixture | two-logical readout | malformed declarations via ChainQ checks |
+| BB | demo `[[8,2]]` plus dimension-jump `[[18,2]]`, `[[30,2]]`, `[[54,2]]` | two-logical readout | zero-logical BB variants reject allocation |
+
 Direct MixedIR fixtures are also checked. `QASM = 0` and `LogicQ = 0` mean the input
 starts at MixedIR, not that earlier layers compiled away:
 
@@ -176,37 +189,42 @@ pass; the [OpenQASM-2 front-end](Compiler/QASM/README.md) and the
 
 Every IR level defines its concrete syntax as a **BNF grammar** in its `Syntax.lean`, and **every
 level now has a real, total text parser** (`Parsing/Basic.lean` + each layer's `Parse.lean`), with
-`by decide` round-trip tests. Below is one minimal program — **flip a qubit, then read it out** — in
-those grammars. The `.lqr` surface front-end ([Compiler/Surface/Parse.lean](Compiler/Surface/Parse.lean))
-and the OpenQASM-2 front-end ([Compiler/QASM/Parse.lean](Compiler/QASM/Parse.lean), ingesting real
-**QASMBench** circuits) additionally **compile end-to-end** to Mixed IR; the PPM/PPR/QStab/QClifford
-parsers produce their checked AST (full text-to-AST), with cross-level lowering done by the verified
-compiler passes. Mixed IR and the lattice-surgery IR remain internal ASTs (no surface grammar).
+`by decide` round-trip tests. **Two keyword rules run through the surface syntax — the keywords ARE
+the AST constructors:** every **logical** instruction carries the **`Logical`** keyword, and every
+**Mixed IR** instruction **leads with its kind keyword** (`transversal`, `transversalCNOT`, `pauli`,
+`ppm`, `magic`, `switch`, …). Below is one minimal program — **flip a qubit, then read it out** — at
+each level.
 
-**Surface program (`.lqr`)** — this *exact text* parses and compiles to Mixed IR. BNF:
-`Stmt ::= 'code' Id 'as' 'Bare' | ('H'|'S'|'T'|'X'|'Z') q[i] | 'CNOT' q[i] ',' q[j] | 'CZ' q[i] ',' q[j] | 'measure' q[i] '->' c[j]`.
+**Logical program** — every instruction carries the **`Logical`** keyword (`LogicalOp`; parses today
+— [Compiler/Mixed/Parse.lean](Compiler/Mixed/Parse.lean)):
 
 ```rust
-code q as Bare           // declare the data block:  one logical = one physical
-X q[0]                   // flip logical qubit 0
-measure q[0] -> c[0]     // logical Z readout into classical bit c[0]
+Logical X q[0]                  // logical bit-flip on logical qubit 0
+Logical measure q[0]↦Z -> c0    // logical Z-readout into classical bit c0
+```
+
+**Mixed IR** — each instruction **leads with its kind keyword** (`MixedInstr`; parses today —
+[Compiler/Mixed/Parse.lean](Compiler/Mixed/Parse.lean)):
+
+```rust
+pauli X q[0]                    // the X lowers to a logical Pauli applied to the carrier
+ppm c0 := M q[0]↦Z              // the measurement lowers to a native PPM fragment
+```
+
+**QASM-compatible front-ends.** The same circuit is also accepted as *bare-gate* text by the `.lqr`
+front-end ([Compiler/Surface/Parse.lean](Compiler/Surface/Parse.lean)) and OpenQASM-2
+([Compiler/QASM/Parse.lean](Compiler/QASM/Parse.lean), ingesting real **QASMBench** circuits) — these
+two **compile end-to-end** to Mixed IR (allocation fills in the `Logical`/Mixed keywords):
+
+```text
+code q as Bare;  X q[0];  measure q[0] -> c[0]      // .lqr
+qreg q[1]; creg c[1]; x q[0]; measure q[0] -> c[0]; // OpenQASM 2
 ```
 
 ```lean
--- the front-end's own verified end-to-end claim (Compiler/Surface/Parse.lean):
+-- the .lqr front-end's verified end-to-end claim (Compiler/Surface/Parse.lean):
 example : compiles? "code q as Bare\nX q[0]\nmeasure q[0] -> c[0]" = true := by decide
 ```
-
-**The same program in OpenQASM 2** — also a real, total parser ([Compiler/QASM/Parse.lean](Compiler/QASM/Parse.lean)):
-
-```text
-qreg q[1];  creg c[1];
-x q[0];
-measure q[0] -> c[0];
-```
-
-**Mixed IR** — the typed gate/measurement AST the front-ends compile to. *No surface grammar yet*
-(internal); machine form: the checked `MixedInstr` AST in [Compiler/Mixed/Syntax.lean](Compiler/Mixed/Syntax.lean).
 
 **QStab — physical dataflow.** BNF: `Stmt ::= QVar '=' 'Prop' PauliStr | QVar '=' 'Parity' QVar+`:
 
@@ -284,34 +302,56 @@ c0 := M q[0]↦Z, r[0]↦Z          // REJECTED: cross-code joint Z̄⊗Z̄ with
 
 → [TypeChecker/Judgment/PPM/Examples.lean](TypeChecker/Judgment/PPM/Examples.lean) · [TypeChecker/](TypeChecker/README.md) · machine form: the `MTarget` + `Capability` record
 
-### 4 · Compiler / Mixed IR — a source program and its lowering
+### 4 · Compiler / Mixed IR — the logical source and its keyword-led lowering
 
-A `.lqr` / OpenQASM logical program lowers to the Mixed IR. `H; S` becomes two direct transversals
-(and `execMixed`-runs to the same state as the ideal simulator — exact-operational equality). The
-Mixed IR itself has no surface grammar (it is the internal checked AST):
+A **`Logical`**-prefixed source program lowers to the Mixed IR, where each instruction **leads with
+its kind keyword**. `Logical H; Logical S` becomes two direct `transversal`s (and `execMixed`-runs to
+the same state as the ideal simulator — exact-operational equality). Both languages parse today
+([Compiler/Mixed/Parse.lean](Compiler/Mixed/Parse.lean)):
 
 ```rust
-// .lqr surface program (parses + compiles):
-H q[0]
-S q[0]
-// → lowers to Mixed IR, machine form: [.transversal 0 [[false,true],[true,false]], …]
+// Logical source — every instruction carries the `Logical` keyword:
+Logical H q[0]
+Logical S q[0]
+// → lowers to Mixed IR — every instruction leads with its kind keyword:
+transversal 0 H            // MixedInstr.transversal 0 hGate2x2
+transversal 0 S            // MixedInstr.transversal 0 sGate2x2
 ```
 
-→ [Compiler/Demo/Contract.lean](Compiler/Demo/Contract.lean) · [Compiler/Mixed/](Compiler/Mixed/README.md) · machine form: `[.transversal 0 [[false,true],[true,false]], …]`
+**The complete Mixed IR instruction set — all eight keywords.** Each colored pill below *is* a
+`MixedInstr` constructor; every instruction in the IR leads with one of them:
+
+![ppm](https://img.shields.io/badge/ppm-1f6feb) ![transversal](https://img.shields.io/badge/transversal-2ea44f) ![transversalCNOT](https://img.shields.io/badge/transversalCNOT-3fb950) ![transversalCNOTBatch](https://img.shields.io/badge/transversalCNOTBatch-238636) ![automorphism](https://img.shields.io/badge/automorphism-8957e5) ![switch](https://img.shields.io/badge/switch-d29922) ![magic](https://img.shields.io/badge/magic-da3633) ![pauli](https://img.shields.io/badge/pauli-009688)
+
+```rust
+// ── these five parse today (Compiler/Mixed/Parse.lean) ──
+ppm c0 := M q[0]↦Z                  // ppm          — a native PPM/PPU fragment
+transversal 0 H                     // transversal  — a local single-qubit transversal Clifford
+transversalCNOT q[0] q[1] [[1]]     // transversalCNOT — inter-block incidence-checked logical CNOT
+pauli X q[0]                        // pauli        — a logical Pauli applied to the carrier
+magic T q[0]                        // magic        — a deferred, typed magic-state (T) obligation
+// ── these three are keyword-led; their matrix / Block / cert payload stays machine-form ──
+automorphism 0 [[ ..2n×2n symplectic.. ]]               // automorphism — an arbitrary symplectic logical automorphism
+switch 0 repCode3 { kind := .gaugeFix, f := encF }      // switch       — a code switch (consumes/transforms block 0)
+transversalCNOTBatch 0 1 [[1]] [[1]]                    // transversalCNOTBatch — a batched high-rate logical CNOT
+```
+
+→ [Compiler/Mixed/Parse.lean](Compiler/Mixed/Parse.lean) · [Compiler/Demo/Contract.lean](Compiler/Demo/Contract.lean) · [Compiler/Mixed/](Compiler/Mixed/README.md) · machine form: `[.ppm …, .transversal …, .transversalCNOT …, .pauli …, .magic …, .automorphism …, .switch …, .transversalCNOTBatch …]`
 
 ### 5 · ChainQ2Mixed — request ≠ realization (transversal CNOT)
 
-The front-end separates *what* a logical op requests from *how* it is realized. A `.lqr` `CNOT`
-carries a physical-incidence request (the allocation's `cnotIncidence`); a non-trivial incidence
-realizes a verified transversal CNOT, while a zero incidence that still claims a logical CNOT is
-rejected (the lifted symplectic map would induce the identity, not the CNOT):
+The front-end separates *what* a logical op requests from *how* it is realized. A logical CNOT lowers
+to the Mixed IR `transversalCNOT` keyword, which carries the physical **incidence** matrix; a
+non-trivial incidence realizes a verified transversal CNOT, while a zero incidence that still claims a
+logical CNOT is rejected (the lifted symplectic map would induce the identity, not the CNOT):
 
 ```rust
-CNOT q[0], r[0]      // realized as a transversal logical CNOT when cnotIncidence = [[1]]
-                     // REJECTED when cnotIncidence = [[0]] (zero incidence ≠ a logical CNOT)
+Logical CNOT q[0] r[0]                     // logical source
+transversalCNOT q[0] r[0] [[1]]            // OK: realized as a transversal logical CNOT
+transversalCNOT q[0] r[0] [[0]]            // REJECTED: zero incidence ≠ a logical CNOT
 ```
 
-→ [Compiler/ChainQ2Mixed/Primitive.lean](Compiler/ChainQ2Mixed/Primitive.lean) · [Compiler/ChainQ2Mixed/](Compiler/ChainQ2Mixed/README.md) · machine form: `.transversalCNOT {…}` / `.transversalBatch {…}`
+→ [Compiler/Mixed/Parse.lean](Compiler/Mixed/Parse.lean) · [Compiler/ChainQ2Mixed/Primitive.lean](Compiler/ChainQ2Mixed/Primitive.lean) · [Compiler/ChainQ2Mixed/](Compiler/ChainQ2Mixed/README.md) · machine form: `.transversalCNOT {control, target, incidence}`
 
 ### 6 · PPR — logical Pauli-product rotations
 
