@@ -69,8 +69,7 @@ inductive Obligation
   | escapeTransition    (carrier : CarrierId) (codeDistance : Nat) -- the escape TRANSITION into the final matchable code (after grafted-code idling)
   | decoderGap          (threshold : String)               -- the escape decoder-gap predicate
   | fullPostselection                                       -- early full postselection assumed correct
-  | distillThreshold    (claim : String)                   -- the distillation threshold precondition
-  | bkATypeSyndrome                                         -- Bravyi–Kitaev NON-Pauli A-type syndrome (η) + decoding (NOT captured by the binary CSS surrogate)
+  | syndromeDecoding    (name : String)                    -- a deferred (possibly non-Pauli) syndrome-decoding obligation, e.g. the RM-15 A-type `η` (NOT captured by the binary CSS surrogate)
   | assumedLogicalCheck (carrier : CarrierId) (obs : LogicalObs) (detector justification : String)
                                                             -- a deferred-ASSUMPTION logical check (e.g. transversal H_XY) the type system can't yet prove (full data preserved)
   | qualityClaim        (claim : String)                   -- a surfaced `MagicQuality.deferred` claim
@@ -391,11 +390,12 @@ def checkOp (Γ : TypedEnv) (menv : MagicEnv) (st : CheckState) :
           checkMagicPred st p           -- scope only; the Boolean value stays deferred
           .ok (menv, st)
       | .decoderGap threshold => .ok (menv, st.addObligation (.decoderGap threshold))
-  | .distill15To1 inputs output outCarrier outCode quality syndromes => do
-      ensure (inputs.length == 15) (.wrongInputArity 15 inputs.length)
-      -- consume exactly the 15 standard `|A₀⟩ = T|+⟩` inputs (`.T`/`.A0`), duplicates ⇒
-      -- already-consumed.  `.Tdg` (the conjugate) and `.Y` are REJECTED — the output is
-      -- always `.T`, so silently accepting `.Tdg` would mis-relabel the conjugate state.
+  | .measureSyndrome inputs output outCarrier outCode quality syndromes => do
+      -- consume the input magic states.  Standard `|A₀⟩ = T|+⟩` (`.T`/`.A0`) only; duplicates ⇒
+      -- already-consumed.  `.Tdg` (the conjugate) and `.Y` are REJECTED — the projected output
+      -- is always `.T`, so silently accepting `.Tdg` would mis-relabel the conjugate state.
+      -- GENERIC ARITY: the "exactly 15" of Bravyi–Kitaev 15-to-1 is a property of the
+      -- `rm15_to_1` LIBRARY protocol, NOT enforced by this primitive.
       let menv1 ← inputs.foldlM (fun (m : MagicEnv) (rid : ResourceId) =>
         match m.slot? rid with
         | none      => .error (.resourceNotFound rid)
@@ -409,33 +409,31 @@ def checkOp (Γ : TypedEnv) (menv : MagicEnv) (st : CheckState) :
       ensure (!menv1.has output) (.resourceIdReused output)
       ensure (st.carrier? outCarrier).isNone (.carrierIdReused outCarrier)
       ensureNoBlockAlias st outCode
-      -- the output carrier CLAIMS the (block) code to hold the distilled state → live + owned.
-      let (_, ob?) ← resolveCode Γ true outCode "distillation output carrier not materialised in ChainQ"
+      -- the output carrier CLAIMS the (block) code to hold the projected state → live + owned.
+      let (_, ob?) ← resolveCode Γ true outCode "syndrome-measure output carrier not materialised in ChainQ"
       let st0 := match ob? with | some o => st.addObligation o | none => st
-      -- The distilled output lands on the RM-15 [[15,1,3]] code, whose distance is a
-      -- STRUCTURAL fact this pass does not prove.  We deliberately do NOT self-stamp
-      -- the carrier's `codeDist` from the SAME `quality` record carried by the output
-      -- (that would make the output codeDistance gate a tautology `d ≤ d`).  Distillation
-      -- establishes NO gated protocol-op distance, so the carrier's distances stay
-      -- `none`: any GATED fault/code-distance promise on a distill output is then
-      -- correctly REJECTED at `output` (no op established it), and an honest factory
-      -- leaves those `none`, recording its real distance/threshold as deferred.
+      -- The projected output lands on the result code, whose distance is a STRUCTURAL fact
+      -- this pass does not prove.  We deliberately do NOT self-stamp the carrier's `codeDist`
+      -- from the SAME `quality` record carried by the output (that would make the output
+      -- codeDistance gate a tautology `d ≤ d`).  This op establishes NO gated protocol-op
+      -- distance, so the carrier's distances stay `none`: any GATED fault/code-distance promise
+      -- on the output is then correctly REJECTED at `output` (no op established it), and an
+      -- honest factory leaves those `none`, recording its real distance/threshold as deferred.
       let cs : CarrierState :=
         { carrier := { code := outCode, logicalCount := 1, quality := quality },
           live := true, faultDist := none, codeDist := none }
-      -- RETIRE the 15 input carriers: their magic states are now consumed, so they
+      -- RETIRE the input carriers: their magic states are now consumed, so they
       -- must NOT be left live in `finalCarriers`.
       let stR := inputs.foldl (fun s rid =>
         match menv1.slot? rid with
         | some slot => match slot.res with | .state inp => s.retireCarrier inp.carrier | .pending _ => s
         | none      => s) st0
-      -- record the deferred BK A-type (non-Pauli) syndrome + decoding obligation, the
-      -- distillation threshold, and surface the output quality's deferred claims.
-      let st1 := ((((stR.setCarrier outCarrier cs).addObligation
-                   (.distillThreshold "ε < 0.141")).addObligation .bkATypeSyndrome).addQualityClaims quality)
-      -- the measured syndromes become postselectable detectors.
-      let st1b := syndromes.foldl (fun s name => s.addDetector name) st1
-      -- mark the 15 inputs consumed in the summary.
+      -- surface the output quality's deferred claims (success probability / threshold / output error).
+      let st1 := (stR.setCarrier outCarrier cs).addQualityClaims quality
+      -- each measured syndrome becomes a postselectable detector AND a deferred decoding
+      -- obligation (e.g. the non-Pauli RM-15 `η`, which the binary CSS surrogate does not prove).
+      let st1b := syndromes.foldl (fun s name => (s.addDetector name).addObligation (.syndromeDecoding name)) st1
+      -- mark the inputs consumed in the summary.
       let st2 := inputs.foldl (fun s rid => s.addConsumed rid) st1b
       let menv2 := menv1.push { id := output, res := .state { basis := .T, carrier := outCarrier, quality := quality } }
       .ok (menv2, st2)

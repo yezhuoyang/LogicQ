@@ -117,7 +117,7 @@ Add a `MagicQ` Lean namespace with these data layers:
 - `PostselectPolicy`: full detector postselection, tagged detector
   postselection, syndrome predicate, and decoder-gap predicate.
 - `ProtocolOp`: `inject`, `checkLogical`, `grow`, `stabilize`, `graft`,
-  `ablate`, `distill15To1`, `decode`, `postselect`, `discard`, `output`.
+  `ablate`, `measureSyndrome`, `decode`, `postselect`, `discard`, `output`.
 - `ProtocolCert`: the checkable and deferred evidence attached to each dynamic
   carrier transition.
 

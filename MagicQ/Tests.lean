@@ -12,10 +12,16 @@ import MagicQ.Library.Cultivation
 namespace MagicQ.Tests
 open MagicQ TypeChecker
 
+-- the `by decide` protocol-checker tests reduce the full `checkProtocol` over the accumulated
+-- obligation list, which exceeds the default elaborator recursion depth (512).
+set_option maxRecDepth 4000
+
 /-! ## §1. Standard 15-to-1 distillation (`rm15_to_1`). -/
 
-/-- **RM15 resource arity (reject).**  Fewer than 15 inputs is rejected. -/
-example : checks? ReedMuller15.rm15To1Underfull = false := by decide
+-- (The old "fewer than 15 inputs is rejected" test was removed with the refactor:
+-- `measureSyndrome` is a GENERIC primitive that does NOT hardwire arity — "exactly 15" is now
+-- a property of the `rm15_to_1` LIBRARY protocol, not a primitive-level check.  Input *basis*
+-- rejection (non-A-type) is still enforced — see §1·5 below.)
 
 /-- **RM15 resource arity (accept).**  Exactly 15 compatible `T` resources check,
     producing exactly ONE output and consuming all 15 inputs (+ the output). -/
@@ -38,16 +44,17 @@ example :
 example :
     ((checkProtocol ⟨[]⟩ ReedMuller15.rm15To1).toOption.map (·.leaked)) = some [] := by decide
 
-/-- … the distillation threshold is recorded as a deferred obligation. -/
+/-- … the distillation threshold is recorded as a deferred quality claim (surfaced from the
+    library protocol's output quality, not hardwired into the primitive). -/
 example :
     ((checkProtocol ⟨[]⟩ ReedMuller15.rm15To1).toOption.map
-      (fun cp => cp.deferred.contains (.distillThreshold "ε < 0.141"))) = some true := by decide
+      (fun cp => cp.deferred.contains (.qualityClaim "ε < 0.141"))) = some true := by decide
 
-/-- … the NON-Pauli Bravyi–Kitaev `A`-type syndrome (`η`) + decoding is recorded as a
-    deferred obligation — the binary CSS surrogate does NOT prove it. -/
+/-- … the NON-Pauli Bravyi–Kitaev `A`-type syndrome (`η`) decoding is recorded as a deferred
+    obligation by `measureSyndrome` — the binary CSS surrogate does NOT prove it. -/
 example :
     ((checkProtocol ⟨[]⟩ ReedMuller15.rm15To1).toOption.map
-      (fun cp => cp.deferred.contains .bkATypeSyndrome)) = some true := by decide
+      (fun cp => cp.deferred.contains (.syndromeDecoding "rm15.eta"))) = some true := by decide
 
 /-- … and the 15 consumed input carriers are RETIRED — `finalCarriers` has NO live
     carrier (every input carrier + the output carrier is retired by op-end). -/
@@ -62,7 +69,7 @@ def distillWith (basis : MagicBasis) : Protocol :=
   { name := "distill_with"
     ops  := ((List.range 15).map
               (fun i => ProtocolOp.inject .supplied basis i (.external "noisy-T-input") i {})) ++
-      [ .distill15To1 (List.range 15) 15 15 (.external "RM15") {} []
+      [ .measureSyndrome (List.range 15) 15 15 (.external "RM15") {} []
       , .output 15 ] }
 
 /-- **Valid `.T` inputs are accepted.** -/
@@ -228,7 +235,7 @@ example : checks? dupCarrier = false := by decide
 def distillInflatedDistance : Protocol :=
   { name := "distill_inflated_distance"
     ops  := ReedMuller15.inputInjections ++
-      [ .distill15To1 (List.range 15) 15 15 (.external "RM15") { codeDistance := some 9999 } []
+      [ .measureSyndrome (List.range 15) 15 15 (.external "RM15") { codeDistance := some 9999 } []
       , .output 15 ] }
 
 example : checks? distillInflatedDistance = false := by decide

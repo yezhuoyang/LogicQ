@@ -248,8 +248,9 @@ inductive InjectStyle
 
     Carriers and resources are explicit so the AST is general enough for BOTH
     families: cultivation (`inject`→`checkLogical`→`grow`→`stabilize`→`graft`→
-    `postselect`→`output`) and standard 15-to-1 (`inject`×15 → `distill15To1` →
-    `postselect` → `output`). -/
+    `postselect`→`output`) and standard 15-to-1 (`inject`×15 → `measureSyndrome` →
+    `postselect` → `output`).  15-to-1 is a LIBRARY composition of primitives, not a
+    single op. -/
 inductive ProtocolOp
   /-- Create an injected magic resource `resource` of `basis` on a FRESH carrier
       `carrier` whose code is `code`, with claimed `quality`. -/
@@ -289,13 +290,18 @@ inductive ProtocolOp
   | switchBlock (carrier : CarrierId) (target : SwitchTarget) (detector : String)
   /-- POSTSELECT on `cond` (scope-checked against prior detectors/syndromes). -/
   | postselect (cond : PostselectCond)
-  /-- 15-to-1 DISTILLATION: consume exactly the 15 input resources `inputs`,
-      producing one output resource `output` of `quality` on fresh carrier
-      `outCarrier` (code `outCode`).  `syndromes` NAMES the detectors/syndromes the
-      distillation measures (e.g. the RM-15 `η`), which become postselectable. -/
-  | distill15To1 (inputs : List ResourceId)
-                 (output : ResourceId) (outCarrier : CarrierId) (outCode : CarrierRef)
-                 (quality : MagicQuality := {}) (syndromes : List String := [])
+  /-- **SYNDROME-MEASURE / projection** — the generic distillation primitive.  Consume the
+      input resources `inputs`, measure the named (possibly non-Pauli) `syndromes` over them,
+      and EXPOSE one projected output resource `output` of `quality` on a fresh carrier
+      `outCarrier` (code `outCode`).  `syndromes` NAMES the detectors the measurement fires
+      (e.g. the RM-15 `η`), which become postselectable and are each recorded as a deferred
+      syndrome-decoding obligation.  GENERIC over the input count: the "exactly 15" of
+      Bravyi–Kitaev 15-to-1 is a property of the `rm15_to_1` LIBRARY protocol, NOT of this
+      primitive.  Does NOT self-stamp the output distance (so an inflated distance claim on the
+      output is rejected at `output`). -/
+  | measureSyndrome (inputs : List ResourceId)
+                    (output : ResourceId) (outCarrier : CarrierId) (outCode : CarrierRef)
+                    (quality : MagicQuality := {}) (syndromes : List String := [])
   /-- DISCARD (consume) a resource — the disposable failure branch. -/
   | discard (resource : ResourceId)
   /-- OUTPUT (return) a magic resource — gated on its carrier being live and its

@@ -402,7 +402,10 @@ A magic-state protocol is a list of `ProtocolOp`s (rendered top-to-bottom below;
 with its **op keyword** — the discriminating constructor). The colored pills are the protocol-op
 keyword set:
 
-![inject](https://img.shields.io/badge/inject-1f6feb) ![assumeLogicalCheck](https://img.shields.io/badge/assumeLogicalCheck-6e7681) ![grow](https://img.shields.io/badge/grow-2ea44f) ![stabilize](https://img.shields.io/badge/stabilize-3fb950) ![graft](https://img.shields.io/badge/graft-8957e5) ![transitionToMatchable](https://img.shields.io/badge/transitionToMatchable-a371f7) ![postselect](https://img.shields.io/badge/postselect-d29922) ![distill15To1](https://img.shields.io/badge/distill15To1-bf8700) ![output](https://img.shields.io/badge/output-da3633)
+![inject](https://img.shields.io/badge/inject-1f6feb) ![assumeLogicalCheck](https://img.shields.io/badge/assumeLogicalCheck-6e7681) ![grow](https://img.shields.io/badge/grow-2ea44f) ![stabilize](https://img.shields.io/badge/stabilize-3fb950) ![graft](https://img.shields.io/badge/graft-8957e5) ![transitionToMatchable](https://img.shields.io/badge/transitionToMatchable-a371f7) ![postselect](https://img.shields.io/badge/postselect-d29922) ![measureSyndrome](https://img.shields.io/badge/measureSyndrome-bf8700) ![output](https://img.shields.io/badge/output-da3633)
+
+(`assumeLogicalCheck` is an **assumption marker** — it records a check the type system can't yet prove,
+e.g. the non-Pauli `H_XY`, as an explicit deferred obligation — *not* a computational primitive.)
 
 **Magic-state cultivation** (Gidney–Shutty–Jones, [2409.17595](https://arxiv.org/abs/2409.17595)) — a
 *live-carrier* protocol that grows one cheap `T` state through **inject → check → grow → stabilize →
@@ -427,15 +430,18 @@ output                 resource 0                                      -- cultiv
 
 → [MagicQ/Library/Cultivation.lean](MagicQ/Library/Cultivation.lean) · [MagicQ/](MagicQ/README.md) · machine form: the `cultivateT` / `defaultT` `Protocol` value
 
-**Standard 15-to-1 distillation** (15 `T` inputs → one output) — the non-Pauli Bravyi–Kitaev A-type
-syndrome `η` stays a deferred obligation:
+**Standard 15-to-1 distillation** (15 `T` inputs → one output) — now a **library composition of
+primitives**, not a single op. 15-to-1 is `inject ×15 → measureSyndrome → postselect → output`, where
+`measureSyndrome` is the **generic** syndrome-measure primitive (the "exactly 15" is a property of
+*this protocol*, not of the primitive). The non-Pauli Bravyi–Kitaev A-type `η`-syndrome decoding stays
+a deferred obligation:
 
 ```text
 -- the rm15_to_1 Protocol value (MagicQ/Library/ReedMuller15.lean):
-inject       t[0..14] : T          -- 15 supplied noisy T inputs (15× inject)
-distill15To1 t[0..14] -> t : RM15  -- Bravyi–Kitaev [[15,1,3]] distillation
-postselect   η == 0                -- keep iff the A-type syndrome η = 0   (η decoding deferred)
-output       t
+inject          t[0..14] : T          -- 15 supplied noisy T inputs (15× inject)
+measureSyndrome t[0..14] -> t : RM15  -- generic primitive: measure the RM-15 η syndrome, project out the T
+postselect      η == 0                -- keep iff the A-type syndrome η = 0   (η decoding deferred)
+output          t
 ```
 
 → [MagicQ/Tests.lean](MagicQ/Tests.lean) · [MagicQ/](MagicQ/README.md) · machine form: the `rm15_to_1` `Protocol` value

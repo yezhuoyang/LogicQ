@@ -21,8 +21,9 @@
   NON-Pauli `A = (X+Y)/√2` operators with an `A`-type syndrome `η` — the ordinary
   `CSSCode` below validates only the BINARY subspace structure, NOT the `A`-type
   checks / `η` decoding / distillation correctness (those are the deferred
-  `bkATypeSyndrome` obligation).  The threshold/output-error/success-probability are
-  carried as strings — NOT proofs.
+  `syndromeDecoding "rm15.eta"` obligation emitted by `measureSyndrome`, plus the
+  protocol's deferred quality claims).  The threshold/output-error/success-probability
+  are carried as strings — NOT proofs.
 
   Mathlib-free.
 -/
@@ -69,8 +70,8 @@ def L2 : BoolMat := linGens ++ quadGens
     ChainQ's ordinary Pauli-CSS machinery to validate ONLY the BINARY SUBSPACE
     STRUCTURE / shape — `rm15Code.valid = true` proves `𝓛₁ ⊆ 𝓛₂^⊥` and `k = 1`, NOT
     the `A`-type checks, the `η` decoding, or any 15-to-1 distillation semantics.
-    Those non-Pauli parts are recorded as the deferred `Obligation.bkATypeSyndrome`
-    (emitted by `distill15To1`). -/
+    Those non-Pauli parts are recorded as the deferred `Obligation.syndromeDecoding`
+    (emitted by `measureSyndrome` for each named syndrome, e.g. `rm15.eta`). -/
 def rm15Code : CSSCode := { n := 15, hx := L1, hz := L2 }
 
 /-! ## §2. Checked structural facts (shape / CSS / rank / dimension), by `decide`. -/
@@ -121,6 +122,7 @@ def rm15OutQuality : MagicQuality :=
     outputError   := some outErrorSym
     successProb   := some successProbSym
     deferred      := [thresholdSym, outErrorSym, successProbSym,
+                      "non-Pauli Bravyi–Kitaev A-type (η) syndrome — decoding not captured by the binary CSS surrogate",
                       "output on Bravyi–Kitaev [[15,1,3]] code (distance 3 structural; not proven here)"] }
 
 /-- The claimed quality of one raw (noisy) input `T`. -/
@@ -155,20 +157,15 @@ def rm15To1 : Protocol :=
                 notes := ["Bravyi–Kitaev 15-to-1, quant-ph/0403025",
                           "input convention |A₀⟩ = T|+⟩ up to Clifford"] }
     ops    := inputInjections ++
-      [ .distill15To1 (List.range 15) 15 15 (.external "RM15-[[15,1,3]]")
+      [ -- 15-to-1 is a LIBRARY COMPOSITION of primitives: measure the RM-15 syndrome over the
+        -- 15 inputs (the generic `measureSyndrome` primitive, NOT a hardwired distillation op),
+        -- postselect `η = 0`, and output the projected `T`.  The "exactly 15" is a property of
+        -- THIS protocol (it supplies 15 inputs), not of the primitive.
+        .measureSyndrome (List.range 15) 15 15 (.external "RM15-[[15,1,3]]")
           rm15OutQuality ["rm15.z-syndrome", "rm15.eta"]
       , .postselect (.syndromeEq "rm15.eta" false)   -- η = 0
       , .output 15 ]
     spec   := [successProbSym, thresholdSym, outErrorSym,
                "output on [[15,1,3]] code; distance 3 structural (deferred)"] }
-
-/-- A `rm15_to_1` variant given FEWER than 15 inputs — must be REJECTED. -/
-def rm15To1Underfull : Protocol :=
-  { rm15To1 with
-    name := "rm15_to_1_underfull"
-    ops  := (inputInjections.take 14) ++
-      [ .distill15To1 (List.range 14) 15 15 (.external "RM15-[[15,1,3]]")
-          rm15OutQuality ["rm15.eta"]
-      , .output 15 ] }
 
 end MagicQ.ReedMuller15

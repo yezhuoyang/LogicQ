@@ -25,6 +25,10 @@ import MagicQ.Library.ReedMuller15
 namespace Compiler.LS
 open QStab Physical
 
+-- the `by decide` scaffold tests reduce `checkProtocol`/`cultivationScaffoldToLS` over the
+-- accumulated obligation list, which exceeds the default elaborator recursion depth (512).
+set_option maxRecDepth 4000
+
 /-- Lower a MagicQ postselection PREDICATE to an `LS.PostPred` (1:1 over the Boolean
     structure).  MagicQ v1 has ONLY detector/syndrome-NAME atoms, so this only ever emits LS
     `.detector` atoms.  In fact the LS `.tag` atom is never produced by ANY MagicQ lowering:
@@ -72,8 +76,8 @@ def magicOpToLS : MagicQ.ProtocolOp → List LSOp
       [ .stage "switch" det
       , .deferred ⟨.custom "checked-block-switch", "v2 ChainQ-checked code switch; executable LS surgery chunk deferred"⟩ ]
   | .postselect cond => magicPostToLS cond
-  | .distill15To1 _ _ _ _ _ _ =>
-      [ .deferred ⟨.custom "distill-15-to-1", "15-to-1 distillation chunk deferred"⟩ ]
+  | .measureSyndrome _ _ _ _ _ _ =>
+      [ .deferred ⟨.custom "measure-syndrome", "syndrome-measure / distillation chunk deferred"⟩ ]
   | .discard _ => [ .stage "discard" "disposable failure branch" ]
   | .output _  => [ .stage "output" "return the cultivated T on the matchable carrier" ]
 
@@ -99,7 +103,7 @@ def isHxyAssumeCheck : MagicQ.ProtocolOp → Bool
     ONE non-Pauli `H_XY` double-check (realised by `Gidney.d3DoubleCatCheck`)?
     `inject`/`postselect`/`output`/`discard` are allowed (their physical chunks stay
     DEFERRED); a Pauli `checkLogical`, `grow`, `graft`, `stabilize`, `transitionToMatchable`,
-    `switchBlock`, `distill15To1`, or a SECOND H_XY check makes it UNSUPPORTED — we refuse to
+    `switchBlock`, `measureSyndrome`, or a SECOND H_XY check makes it UNSUPPORTED — we refuse to
     erase multiplicity by collapsing several checks into one chunk.  This is SYNTACTIC ONLY;
     SEMANTIC validity (carrier/resource/scope/liveness/linearity) is enforced separately by
     `MagicQ.checkProtocol` in `executableSubsetGate?`. -/
@@ -636,8 +640,9 @@ example : MagicQ.checks? MagicQ.ReedMuller15.rm15To1 = true := by decide
 example : onlyExecutableStageIsHxyCheck MagicQ.ReedMuller15.rm15To1 = false := by decide
 example : (cultivationToExecutableLS? MagicQ.ReedMuller15.rm15To1).toOption.isSome = false := by decide
 example : (cultivationToExecutableLSSubset? MagicQ.ReedMuller15.rm15To1).toOption.isSome = false := by decide
--- the scaffold records the 15-to-1 chunk as an EXPLICIT deferred contract (never silently lowered):
+-- the scaffold records the syndrome-measure (15-to-1) chunk as an EXPLICIT deferred contract
+-- (never silently lowered):
 example : (cultivationScaffoldToLS MagicQ.ReedMuller15.rm15To1).contracts.any
-    (fun c => decide (c.kind = .custom "distill-15-to-1")) = true := by decide
+    (fun c => decide (c.kind = .custom "measure-syndrome")) = true := by decide
 
 end Compiler.LS
